@@ -4,7 +4,12 @@ const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  cors: {
+    origin: "*", // Permite conexões de qualquer origem. Para produção, é mais seguro restringir a URL do seu frontend.
+    methods: ["GET", "POST"]
+  }
+});
 
 // A porta é fornecida pela plataforma de hospedagem (como a Render) através de uma variável de ambiente.
 const PORT = process.env.PORT || 3000;
