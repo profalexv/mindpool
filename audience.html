@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Responder</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f0f2f5; }
+        .container { text-align: center; }
+        button { font-size: 1.2em; padding: 15px 30px; margin: 10px; cursor: pointer; border: none; border-radius: 5px; background-color: #4a90e2; color: white; }
+        button:hover { background-color: #357abd; }
+        #feedback { margin-top: 20px; color: green; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Qual sua linguagem de programação favorita?</h1>
+        <div>
+            <button onclick="submitAnswer('optionA')">JavaScript</button>
+            <button onclick="submitAnswer('optionB')">Python</button>
+            <button onclick="submitAnswer('optionC')">Java</button>
+        </div>
+        <p id="feedback"></p>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        // TODO: Substitua esta URL pela URL real do seu backend quando ele estiver no ar na Render
+        const socket = io("https://mindpool-backend.onrender.com"); // <-- SUBSTITUA PELA SUA URL REAL
+
+        function submitAnswer(option) {
+            // Emite um evento para o servidor com a opção escolhida
+            socket.emit('submitAnswer', option);
+            
+            // Fornece feedback ao usuário
+            document.getElementById('feedback').innerText = 'Sua resposta foi enviada! Obrigado.';
+            document.querySelectorAll('button').forEach(btn => btn.disabled = true);
+        }
+    </script>
+</body>
+</html>
