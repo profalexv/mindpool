@@ -6,19 +6,12 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*", 
+    origin: ["https://mindpool.alexandre.pro.br", "http://mindpool.alexandre.pro.br"],
     methods: ["GET", "POST"],
     credentials: true
   },
-  transports: ['websocket', 'polling'] // Adicione isso para garantir compatibilidade
+  allowEIO3: true // Adicione isso para maior compatibilidade
 });
-/*const io = new Server(server, {
-  cors: {
-    origin: "*", // Permite conexões de qualquer origem. Para produção, é mais seguro restringir a URL do seu frontend.
-    methods: ["GET", "POST"]
-  }
-});*/
-
 // A porta é fornecida pela plataforma de hospedagem (como a Render) através de uma variável de ambiente.
 const PORT = process.env.PORT || 3000;
 
