@@ -1,4 +1,4 @@
-const socket = io();
+const socket = io("https://mindpool-backend.onrender.com");
 const params = new URLSearchParams(window.location.search);
 const role = params.get('role');
 
