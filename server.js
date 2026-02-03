@@ -124,11 +124,10 @@ io.on('connection', (socket) => {
             const question = session.questions[questionId];
             question.results = {}; // Reseta os resultados para a nova pergunta
             question.acceptingAnswers = true;
-            let endTime = null;
             question.endTime = null;
             if (question.timer && question.timer.duration > 0) {
                 // Calcula o horário de término com base no relógio do servidor
-                endTime = Date.now() + (question.timer.duration * 1000);
+                question.endTime = Date.now() + (question.timer.duration * 1000);
             }
             
             if (question.questionType === 'options' && question.options) {
@@ -139,7 +138,7 @@ io.on('connection', (socket) => {
             }
             
             // Envia a pergunta para a plateia e para o telão
-            io.to(sessionCode).emit('newQuestion', { ...question, endTime });
+            io.to(sessionCode).emit('newQuestion', { ...question });
             console.log(`Sessão ${sessionCode}: iniciando pergunta ${questionId}`);
         }
     });

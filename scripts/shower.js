@@ -129,8 +129,8 @@ socket.on('questionsUpdated', (questions) => {
     });
 });
 
-function startQuestion(questionId, displayMode) {
-    socket.emit('startQuestion', { sessionCode, questionId, displayMode });
+function startQuestion(questionId) {
+    socket.emit('startQuestion', { sessionCode, questionId });
 }
 
 function stopVoting(questionId) {
