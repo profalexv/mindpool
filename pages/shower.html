@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Controle (Shower)</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        .question-form, .question-list, .timer-config { border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; border-radius: 8px; }
+        input, button { font-size: 1em; padding: 8px; margin: 5px 0; }
+        .type-config {
+            display: none;
+            margin-top: 10px;
+        }
+        .question-item { border-bottom: 1px solid #eee; padding: 10px 0; }
+        .question-item:last-child { border-bottom: none; }
+        .question-item.warning {
+            background-color: #fcf8e3;
+            border-left: 5px solid #f0ad4e;
+        }
+    </style>
+</head>
+<body>
+    <h1>Painel de Controle - Sessão <span id="session-code"></span></h1>
+    <div>
+        <button id="end-session-btn" style="background-color: #d9534f; margin-bottom: 20px;">Encerrar Sessão</button>
+    </div>
+    
+    <div class="question-form">
+        <h2>Criar Nova Pergunta</h2>
+        <input type="text" id="question-text" placeholder="Texto da pergunta">
+
+        <label for="question-type" style="margin-top: 10px; display: block;">Tipo de Resposta:</label>
+        <select id="question-type">
+            <option value="options" selected>Opções (múltipla escolha)</option>
+            <option value="yes_no">Sim / Não</option>
+            <option value="short_text">Texto Curto</option>
+            <option value="long_text">Texto Longo</option>
+            <option value="number">Número (qualquer)</option>
+            <option value="integer">Número (inteiro)</option>
+        </select>
+
+        <div id="options-config" class="type-config" style="display: block;">
+            <input type="text" id="question-options" placeholder="Opções separadas por vírgula (ex: Opção 1,Opção 2)">
+        </div>
+        <div id="text-config" class="type-config">
+            <input type="number" id="char-limit" placeholder="Limite de caracteres (ex: 50)">
+        </div>
+
+        <div class="timer-config">
+            <label>
+                <input type="checkbox" id="timer-enabled"> Habilitar Cronômetro
+            </label>
+            <div id="timer-options" style="display: none; margin-top: 10px;">
+                <input type="number" id="timer-duration" placeholder="Duração em minutos (ex: 1)">
+                <label>
+                    <input type="checkbox" id="timer-show-audience"> Exibir para a audiência
+                </label>
+            </div>
+        </div>
+
+        <input type="text" id="question-image" placeholder="URL da imagem (opcional)">
+        <button id="create-question-btn">Criar Pergunta</button>
+    </div>
+
+    <div class="question-list">
+        <h2>Perguntas Criadas</h2>
+        <div id="questions-container">
+            <p>Nenhuma pergunta criada ainda.</p>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/scripts/cronometro.js"></script>
+    <script src="/scripts/shower.js"></script>
+</body>
+</html>

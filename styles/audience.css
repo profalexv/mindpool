@@ -1,0 +1,5 @@
+body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f0f2f5; }
+.container { text-align: center; }
+button { font-size: 1.2em; padding: 15px 30px; margin: 10px; cursor: pointer; border: none; border-radius: 5px; background-color: #4a90e2; color: white; }
+button:hover { background-color: #357abd; }
+#feedback { margin-top: 20px; color: green; font-weight: bold; }

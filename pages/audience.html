@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Responder</title>
+    <link rel="stylesheet" href="/styles/audience.css">
+</head>
+<body>
+    <div class="container">
+        <div id="audience-timer" style="font-size: 1.5em; font-weight: bold; color: #d9534f; margin-bottom: 15px; display: none;"></div>
+        <h1 id="question-title">Aguardando a próxima pergunta...</h1>
+        <div id="options-container">
+            <!-- As opções de resposta aparecerão aqui -->
+        </div>
+        <p id="feedback"></p>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/scripts/cronometro.js"></script>
+    <script src="/scripts/audience.js"></script>
+</body>
+</html>

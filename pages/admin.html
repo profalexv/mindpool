@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acesso Administrativo</title>
+    <link rel="stylesheet" href="/styles/audience.css">
+    <style>
+        .form-section { display: none; }
+        .form-section.active { display: block; }
+        input { margin-bottom: 10px; width: 80%; padding: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 id="page-title"></h1>
+        <p id="error-message" style="color: red;"></p>
+
+        <div>
+            <button id="show-new-session-btn">Nova Sessão</button>
+            <button id="show-join-session-btn">Entrar em Sessão</button>
+        </div>
+
+        <!-- Formulário para Nova Sessão (apenas para Shower) -->
+        <div id="new-session-form" class="form-section">
+            <h2>Criar Nova Sessão</h2>
+            <label for="session-deadline" style="display: block; margin-top: 10px; text-align: left; width: 80%; margin-left: auto; margin-right: auto;">Prazo Final da Sessão (Opcional)</label>
+            <input type="datetime-local" id="session-deadline">
+            <input type="password" id="new-shower-pass" placeholder="Crie uma senha para o Shower">
+            <input type="password" id="new-presenter-pass" placeholder="Crie uma senha para o Presenter">
+            <button id="create-session-btn">Criar e Entrar</button>
+        </div>
+
+        <!-- Formulário para Entrar em Sessão -->
+        <div id="join-session-form" class="form-section">
+            <h2>Entrar em Sessão Ativa</h2>
+            <input type="text" id="join-session-code" placeholder="Código da Sessão" style="text-transform: uppercase;">
+            <input type="password" id="join-session-pass" placeholder="Senha">
+            <button id="join-session-btn">Entrar</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/scripts/admin.js"></script>
+</body>
+</html>
