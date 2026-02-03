@@ -1,4 +1,7 @@
-const socket = io("https://mindpool-backend.onrender.com");
+const socket = io("https://mindpool-backend.onrender.com", {
+    transports: ['websocket', 'polling'],
+    withCredentials: true
+});
 const params = new URLSearchParams(window.location.search);
 const role = params.get('role');
 
