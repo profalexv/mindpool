@@ -32,7 +32,7 @@ function getSessionPassword() {
     return password;
 }
 
-const waitingScreen = document.getElementById('waiting-screen');
+const sessionInfoContainer = document.getElementById('session-info-container');
 const questionScreen = document.getElementById('question-screen');
 const resultsContainer = document.getElementById('results-container');
 const wordCloudContainer = document.getElementById('word-cloud-container');
@@ -77,13 +77,18 @@ function joinPresenterSession() {
 
         sessionDeadline = response.deadline;
         if (sessionDeadline) {
+            const remainingTime = sessionDeadline - Date.now();
             const deadlineAlertEl = document.getElementById('deadline-alert');
-            if (deadlineAlertEl) {
-                setInterval(() => {
-                    if (Date.now() > sessionDeadline) {
-                        deadlineAlertEl.style.display = 'block';
-                    }
-                }, 5000);
+
+            if (remainingTime <= 0) {
+                // Se o prazo já passou, exibe a mensagem imediatamente.
+                if (deadlineAlertEl) deadlineAlertEl.style.display = 'block';
+            } else {
+                // Agenda a exibição da mensagem para quando o prazo for atingido.
+                // Isso é mais eficiente que setInterval.
+                setTimeout(() => {
+                    if (deadlineAlertEl) deadlineAlertEl.style.display = 'block';
+                }, remainingTime);
             }
         }
     });
@@ -99,7 +104,7 @@ socket.on('newQuestion', (question) => {
     }
     if (presenterTimerEl) presenterTimerEl.style.display = 'none';
 
-    if (waitingScreen) waitingScreen.style.display = 'none';
+    if (sessionInfoContainer) sessionInfoContainer.className = 'state-question';
     if (questionScreen) questionScreen.style.display = 'block';
     
     // Limpa ambos os containers de resultado

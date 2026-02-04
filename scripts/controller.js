@@ -209,7 +209,17 @@ const ui = {
         deadlineAlertEl.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; background: #d9534f; color: white; padding: 10px; text-align: center; font-weight: bold; display: none; z-index: 1000;';
         deadlineAlertEl.innerText = 'TEMPO ESGOTADO';
         document.body.insertBefore(deadlineAlertEl, document.body.firstChild);
-        setInterval(() => { if (Date.now() > sessionDeadline) deadlineAlertEl.style.display = 'block'; }, 5000);
+
+        const remainingTime = sessionDeadline - Date.now();
+        if (remainingTime <= 0) {
+            // Se o prazo já passou, exibe a mensagem imediatamente.
+            deadlineAlertEl.style.display = 'block';
+        } else {
+            // Agenda a exibição da mensagem para quando o prazo for atingido.
+            setTimeout(() => {
+                deadlineAlertEl.style.display = 'block';
+            }, remainingTime);
+        }
     }
 };
 

@@ -8,29 +8,28 @@
 </head>
 <body class="presenter-page">
     <div class="content">
-        <!-- Tela de Espera com QR Code -->
-        <div id="waiting-screen">
-            <p>Entre com o código:</p>
-            <h1 id="session-code-display"></h1>
-            <p>ou escaneie o QR Code</p>
-            <div id="qrcode"></div>
-        </div>
-
-        <!-- Tela da Pergunta e Resultados -->
+        <!-- Tela da Pergunta e Resultados (inicialmente oculta) -->
         <div id="question-screen">
             <div id="deadline-alert">TEMPO ESGOTADO</div>
             <div id="presenter-timer"></div>
             <h1 id="question-text"></h1>
             <img id="question-image" src="">
-            <!-- Container para barras e Sim/Não -->
             <div id="results-container"></div>
-            <!-- Container para nuvem de palavras -->
             <div id="word-cloud-container"></div>
         </div>
     </div>
 
+    <!-- Container persistente para QR Code e Código da Sessão -->
+    <div id="session-info-container" class="state-waiting">
+        <div id="qrcode"></div>
+        <div class="text-info">
+            <p>Participe com o código:</p>
+            <h1 id="session-code-display"></h1>
+        </div>
+    </div>
+
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <script src="/scripts/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="/scripts/cronometro.js"></script>
     <script src="/scripts/presenter.js"></script>
 </body>
