@@ -2,88 +2,347 @@ const express = require('express');
 const http = require('http');
 const { Server } = require("socket.io");
 const path = require('path');
+require('dotenv').config();
 
+// ===== CONFIGURAÇÃO DE AMBIENTE =====
+const NODE_ENV = process.env.NODE_ENV || 'local';
+const PORT = process.env.PORT || 3000;
+const LOG_LEVEL = process.env.LOG_LEVEL || 'INFO';
+const ENABLE_PASSWORD_HASHING = process.env.ENABLE_PASSWORD_HASHING === 'true';
+const ENABLE_RATE_LIMITING = process.env.ENABLE_RATE_LIMITING === 'true';
+const SESSION_TIMEOUT = (process.env.SESSION_TIMEOUT || 1440) * 60 * 1000; // converter minutos para ms
+const RATE_LIMIT_MAX_ATTEMPTS = parseInt(process.env.RATE_LIMIT_MAX_ATTEMPTS || '5');
+const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000');
+
+// ===== DEPENDÊNCIAS =====
+let bcrypt;
+if (ENABLE_PASSWORD_HASHING) {
+    try {
+        bcrypt = require('bcryptjs');
+    } catch (e) {
+        console.warn('bcryptjs não instalado. Instale com: npm install bcryptjs');
+        console.warn('Continuando sem hash de senhas...');
+    }
+}
+
+// ===== LOGGER CUSTOMIZADO =====
+const loggerLevels = { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 };
+const currentLogLevel = loggerLevels[LOG_LEVEL] || 1;
+
+const logger = {
+    levels: loggerLevels,
+    level: currentLogLevel,
+    
+    debug: (msg) => logger.level <= 0 && console.log(`[DEBUG] ${new Date().toISOString()} - ${msg}`),
+    info: (msg) => logger.level <= 1 && console.log(`[INFO] ${new Date().toISOString()} - ${msg}`),
+    warn: (msg) => logger.level <= 2 && console.warn(`[WARN] ${new Date().toISOString()} - ${msg}`),
+    error: (msg) => logger.level <= 3 && console.error(`[ERROR] ${new Date().toISOString()} - ${msg}`)
+};
+
+// ===== RATE LIMITING =====
+const loginAttempts = new Map(); // { ip: { count, resetTime } }
+
+function checkRateLimit(ip) {
+    if (!ENABLE_RATE_LIMITING) return true;
+    
+    const now = Date.now();
+    const attempts = loginAttempts.get(ip);
+    
+    if (!attempts || now > attempts.resetTime) {
+        loginAttempts.set(ip, { count: 0, resetTime: now + RATE_LIMIT_WINDOW_MS });
+        return true;
+    }
+    
+    attempts.count++;
+    if (attempts.count > RATE_LIMIT_MAX_ATTEMPTS) {
+        return false;
+    }
+    return true;
+}
+
+function resetRateLimitAttempts(ip) {
+    loginAttempts.delete(ip);
+}
+
+// ===== BCRYPT ALTERNATIVO (sem dependência externa) =====
+const simpleHash = {
+    hash: async (password) => {
+        if (bcrypt) {
+            return await bcrypt.hash(password, 10);
+        }
+        // Hash simples se bcryptjs não estiver disponível (apenas para dev)
+        return Buffer.from(password).toString('base64');
+    },
+    compare: async (password, hash) => {
+        if (bcrypt) {
+            return await bcrypt.compare(password, hash);
+        }
+        return Buffer.from(password).toString('base64') === hash;
+    }
+};
+
+// ===== EXPRESS E SOCKET.IO =====
 const app = express();
 const server = http.createServer(app);
+
+// Configuração de CORS dinâmica
+const getOrigins = () => {
+    const origins = [
+        "https://mindpool.alexandre.pro.br",
+        "http://mindpool.alexandre.pro.br",
+        "https://www.mindpool.alexandre.pro.br",
+        "http://www.mindpool.alexandre.pro.br",
+        "http://localhost:3000", // Local
+        "http://localhost:*" // Qualquer porta local
+    ];
+    return origins;
+};
+
 const io = new Server(server, {
-  cors: {
-    origin: ["https://mindpool.alexandre.pro.br", "http://mindpool.alexandre.pro.br", "https://www.mindpool.alexandre.pro.br", "http://www.mindpool.alexandre.pro.br"],
-    methods: ["GET", "POST"],
-    credentials: true
-  },
-  allowEIO3: true // Adicione isso para maior compatibilidade
+    cors: {
+        origin: getOrigins(),
+        methods: ["GET", "POST"],
+        credentials: true
+    },
+    allowEIO3: true
 });
-// A porta é fornecida pela plataforma de hospedagem (como a Render) através de uma variável de ambiente.
-const PORT = process.env.PORT || 3000;
 
-// Objeto para armazenar todas as sessões ativas. A chave será o código da sessão.
-const sessions = {};
+// Middleware para logar conexões
+io.use((socket, next) => {
+    const clientIp = socket.handshake.address;
+    logger.info(`Novo cliente conectando: ${clientIp}`);
+    next();
+});
 
-// Função para gerar um código de sessão simples e único
+// ===== ARMAZENAMENTO DE SESSÕES =====
+const sessions = {}; // { sessionCode: { ... } }
+const sessionHistories = new Map(); // { controllerSocketId: [...] }
+
+// ===== FUNÇÕES AUXILIARES =====
 function generateSessionCode() {
     let code;
     do {
         code = Math.random().toString(36).substring(2, 8).toUpperCase();
-    } while (sessions[code]); // Garante que o código seja único
+    } while (sessions[code]);
     return code;
 }
 
-// Servir arquivos estáticos da raiz do projeto.
-// Isso permite que o servidor entregue os arquivos HTML, CSS e JS a partir da pasta raiz do projeto.
+function logAction(sessionCode, action, details = '') {
+    logger.info(`[SESSION: ${sessionCode}] ${action} ${details}`);
+}
+
+// Limpeza automática de sessões expiradas
+setInterval(() => {
+    const now = Date.now();
+    const expiredSessions = [];
+    
+    for (const [code, session] of Object.entries(sessions)) {
+        if (SESSION_TIMEOUT > 0 && now - session.createdAt > SESSION_TIMEOUT) {
+            expiredSessions.push(code);
+        }
+    }
+    
+    expiredSessions.forEach(code => {
+        logAction(code, 'EXPIRADA', '(limpeza automática)');
+        delete sessions[code];
+    });
+    
+    if (expiredSessions.length > 0) {
+        logger.warn(`${expiredSessions.length} sessão(ões) expirada(s) removida(s)`);
+    }
+}, parseInt(process.env.SESSION_CLEANUP_INTERVAL || '300000'));
+
+// ===== SERVIR ARQUIVOS ESTÁTICOS =====
 app.use(express.static(path.join(__dirname, '..')));
 
-io.on('connection', (socket) => {
-    console.log('Um usuário se conectou');
+// ===== ROTA PARA HEALTH CHECK =====
+app.get('/health', (req, res) => {
+    res.json({ 
+        status: 'ok', 
+        environment: NODE_ENV,
+        timestamp: new Date().toISOString(),
+        activeSessions: Object.keys(sessions).length
+    });
+});
 
-    // 1. CRIAR UMA NOVA SESSÃO (com senhas)
-    socket.on('createSession', ({ controllerPassword, presenterPassword, deadline }, callback) => {
-        const sessionCode = generateSessionCode();
-        sessions[sessionCode] = {
-            controllerPassword,
-            presenterPassword,
-            controllerSocketId: null, // Garante que apenas um controller esteja conectado
-            deadline: deadline || null,
-            questions: [],
-            activeQuestion: null,
-            audienceCount: 0,
-        };
-        console.log(`Sessão criada: ${sessionCode}`);
-        // Retorna sucesso e o código para o cliente
-        callback({ success: true, sessionCode });
+// ===== ROTA PARA EXPORT DE RESULTADOS =====
+app.get('/api/export/:sessionCode/:format', (req, res) => {
+    const { sessionCode, format } = req.params;
+    const session = sessions[sessionCode];
+    
+    if (!session) {
+        return res.status(404).json({ error: 'Sessão não encontrada' });
+    }
+    
+    let content, filename, contentType;
+    
+    if (format === 'json') {
+        content = JSON.stringify(session, null, 2);
+        filename = `sessao-${sessionCode}.json`;
+        contentType = 'application/json';
+    } else if (format === 'csv') {
+        // Gera CSV com resultados das perguntas
+        let csv = 'ID,Pergunta,Tipo,Total Respostas,Resultados\n';
+        session.questions.forEach((q, idx) => {
+            const results = JSON.stringify(q.results).replace(/"/g, '""');
+            csv += `${idx},${q.text.replace(/"/g, '""')},${q.questionType},${Object.values(q.results).reduce((a, b) => a + b, 0)},${results}\n`;
+        });
+        content = csv;
+        filename = `sessao-${sessionCode}.csv`;
+        contentType = 'text/csv';
+    } else {
+        return res.status(400).json({ error: 'Formato inválido (use json ou csv)' });
+    }
+    
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(content);
+});
+
+// ===== SOCKET.IO EVENTS =====
+io.on('connection', (socket) => {
+    const clientIp = socket.handshake.address;
+    logger.info(`Usuário conectado: ${socket.id}`);
+
+    // 1. CRIAR UMA NOVA SESSÃO
+    socket.on('createSession', async ({ controllerPassword, presenterPassword, deadline }, callback) => {
+        try {
+            // Rate limiting
+            if (!checkRateLimit(clientIp)) {
+                logger.warn(`Rate limit atingido para IP: ${clientIp}`);
+                return callback({ 
+                    success: false, 
+                    message: 'Muitas tentativas. Aguarde alguns segundos.' 
+                });
+            }
+
+            // Validação básica
+            if (!controllerPassword || !presenterPassword) {
+                return callback({ success: false, message: 'Senhas são obrigatórias.' });
+            }
+
+            if (controllerPassword.length < 4 || presenterPassword.length < 4) {
+                return callback({ 
+                    success: false, 
+                    message: 'Senhas devem ter pelo menos 4 caracteres.' 
+                });
+            }
+
+            if (controllerPassword === presenterPassword) {
+                return callback({ 
+                    success: false, 
+                    message: 'Senhas do Controller e Presenter devem ser diferentes.' 
+                });
+            }
+
+            if (deadline && deadline < Date.now()) {
+                return callback({ 
+                    success: false, 
+                    message: 'O prazo não pode ser no passado.' 
+                });
+            }
+
+            // Hash de senhas
+            let hashController = controllerPassword;
+            let hashPresenter = presenterPassword;
+            
+            if (ENABLE_PASSWORD_HASHING && bcrypt) {
+                try {
+                    hashController = await simpleHash.hash(controllerPassword);
+                    hashPresenter = await simpleHash.hash(presenterPassword);
+                } catch (e) {
+                    logger.error(`Erro ao fazer hash das senhas: ${e.message}`);
+                }
+            }
+
+            const sessionCode = generateSessionCode();
+            sessions[sessionCode] = {
+                code: sessionCode,
+                controllerPassword: hashController,
+                presenterPassword: hashPresenter,
+                controllerSocketId: null,
+                presenterSocketIds: [], // Múltiplos presenters
+                deadline: deadline || null,
+                questions: [],
+                activeQuestion: null,
+                audienceCount: 0,
+                createdAt: Date.now(),
+                createdByIp: clientIp,
+                isHashed: ENABLE_PASSWORD_HASHING && bcrypt ? true : false
+            };
+
+            resetRateLimitAttempts(clientIp);
+            logAction(sessionCode, 'CRIADA');
+            
+            callback({ success: true, sessionCode });
+        } catch (err) {
+            logger.error(`Erro ao criar sessão: ${err.message}`);
+            callback({ success: false, message: 'Erro ao criar sessão. Tente novamente.' });
+        }
     });
 
-    // 2. ENTRAR EM UMA SESSÃO (ADMIN: Controller ou Presenter)
-    socket.on('joinAdminSession', ({ sessionCode, password, role }, callback) => {
-        if (!sessions[sessionCode]) {
-            return callback({ success: false, message: 'Sessão não encontrada.' });
-        }
+    // 2. ENTRAR EM UMA SESSÃO
+    socket.on('joinAdminSession', async ({ sessionCode, password, role }, callback) => {
+        try {
+            if (!sessions[sessionCode]) {
+                return callback({ success: false, message: 'Sessão não encontrada.' });
+            }
 
-        const session = sessions[sessionCode];
-        const expectedPassword = (role === 'controller') ? session.controllerPassword : session.presenterPassword;
+            const session = sessions[sessionCode];
+            const expectedPassword = role === 'controller' 
+                ? session.controllerPassword 
+                : session.presenterPassword;
 
-        if (password !== expectedPassword) {
-            return callback({ success: false, message: 'Senha incorreta.' });
-        }
+            // Comparar senha (com ou sem hash)
+            let passwordMatch = false;
+            if (session.isHashed && bcrypt) {
+                try {
+                    passwordMatch = await simpleHash.compare(password, expectedPassword);
+                } catch (e) {
+                    passwordMatch = false;
+                }
+            } else {
+                passwordMatch = password === expectedPassword;
+            }
 
-        if (role === 'controller' && session.controllerSocketId && session.controllerSocketId !== socket.id) {
-            return callback({ success: false, message: 'Já existe um Controller ativo nesta sessão.' });
-        }
+            if (!passwordMatch) {
+                logger.warn(`Senha incorreta para sessão ${sessionCode} (role: ${role})`);
+                return callback({ success: false, message: 'Senha incorreta.' });
+            }
 
-        socket.join(sessionCode);
-        socket.sessionCode = sessionCode; // Armazena o código no socket para o disconnect
-        socket.role = role;
+            // Verificar se já existe um controller
+            if (role === 'controller' && session.controllerSocketId && session.controllerSocketId !== socket.id) {
+                // Permitir múltiplos controllers (novo na v1.17)
+                logger.warn(`Múltiplos controllers tentando acessar ${sessionCode}`);
+                // Desconectar o antigo e conectar o novo
+                const oldSocket = io.sockets.sockets.get(session.controllerSocketId);
+                if (oldSocket) {
+                    oldSocket.emit('controllerDisplaced', { message: 'Novo controller conectado à sessão' });
+                    oldSocket.disconnect();
+                }
+            }
 
-        if (role === 'controller') {
-            session.controllerSocketId = socket.id;
-        }
+            socket.join(sessionCode);
+            socket.sessionCode = sessionCode;
+            socket.role = role;
 
-        console.log(`Usuário com role '${role}' entrou na sessão ${sessionCode}`);
-        callback({ success: true, deadline: session.deadline });
+            if (role === 'controller') {
+                session.controllerSocketId = socket.id;
+            } else if (role === 'presenter') {
+                session.presenterSocketIds.push(socket.id);
+            }
 
-        // Envia o estado atual da sessão para quem acabou de entrar
-        socket.emit('questionsUpdated', session.questions);
-        if (session.activeQuestion) {
-            socket.emit('newQuestion', session.questions[session.activeQuestion]);
+            logAction(sessionCode, `${role.toUpperCase()} conectado`);
+            callback({ success: true, deadline: session.deadline });
+
+            // Enviar estado atual
+            socket.emit('questionsUpdated', session.questions);
+            if (session.activeQuestion !== null) {
+                socket.emit('newQuestion', session.questions[session.activeQuestion]);
+            }
+        } catch (err) {
+            logger.error(`Erro ao entrar em sessão: ${err.message}`);
+            callback({ success: false, message: 'Erro ao conectar. Tente novamente.' });
         }
     });
 
@@ -97,7 +356,8 @@ io.on('connection', (socket) => {
         socket.sessionCode = sessionCode;
         socket.role = 'audience';
         sessions[sessionCode].audienceCount++;
-        console.log(`Plateia entrou na sessão ${sessionCode}. Total: ${sessions[sessionCode].audienceCount}`);
+        
+        logAction(sessionCode, `PLATEIA conectada (total: ${sessions[sessionCode].audienceCount})`);
 
         const session = sessions[sessionCode];
         if (session.activeQuestion !== null) {
@@ -105,35 +365,95 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 4. CRIAR UMA NOVA PERGUNTA (vindo do controller.html)
+    // 4. CRIAR UMA NOVA PERGUNTA
     socket.on('createQuestion', ({ sessionCode, question }) => {
         const session = sessions[sessionCode];
-        if (session) {
-            session.questions.push({
-                id: session.questions.length,
-                text: question.text,
-                imageUrl: question.imageUrl,
-                questionType: question.questionType,
-                options: question.options,
-                charLimit: question.charLimit,
-                timer: question.timer,
-                results: {} });
-            // Notifica todos os admins (controller/presenter) que a lista de perguntas foi atualizada
-            io.to(sessionCode).emit('questionsUpdated', session.questions);
-        }
+        if (!session) return;
+
+        session.questions.push({
+            id: session.questions.length,
+            text: question.text,
+            imageUrl: question.imageUrl,
+            questionType: question.questionType,
+            options: question.options,
+            charLimit: question.charLimit,
+            timer: question.timer,
+            results: {},
+            createdAt: Date.now(),
+            canEdit: true // Nova propriedade para permitir edição
+        });
+
+        logAction(sessionCode, `PERGUNTA #${session.questions.length - 1} criada`);
+        io.to(sessionCode).emit('questionsUpdated', session.questions);
     });
 
-    // 5. INICIAR UMA PERGUNTA (vindo do controller.html)
+    // 5. EDITAR UMA PERGUNTA (NOVO em v1.17)
+    socket.on('editQuestion', ({ sessionCode, questionId, updatedQuestion }) => {
+        const session = sessions[sessionCode];
+        if (!session || !session.questions[questionId]) return;
+
+        const question = session.questions[questionId];
+        
+        // Só pode editar antes de iniciar
+        if (session.activeQuestion === questionId) {
+            socket.emit('error', 'Não pode editar pergunta ativa');
+            return;
+        }
+
+        // Atualizar propriedades
+        question.text = updatedQuestion.text || question.text;
+        question.imageUrl = updatedQuestion.imageUrl || question.imageUrl;
+        question.options = updatedQuestion.options || question.options;
+        question.charLimit = updatedQuestion.charLimit || question.charLimit;
+        question.timer = updatedQuestion.timer || question.timer;
+
+        logAction(sessionCode, `PERGUNTA #${questionId} editada`);
+        io.to(sessionCode).emit('questionsUpdated', session.questions);
+    });
+
+    // 6. DUPLICAR UMA PERGUNTA (NOVO em v1.17)
+    socket.on('duplicateQuestion', ({ sessionCode, questionId }) => {
+        const session = sessions[sessionCode];
+        if (!session || !session.questions[questionId]) return;
+
+        const originalQuestion = session.questions[questionId];
+        const newQuestion = JSON.parse(JSON.stringify(originalQuestion));
+        newQuestion.id = session.questions.length;
+        newQuestion.results = {};
+        newQuestion.createdAt = Date.now();
+
+        session.questions.push(newQuestion);
+
+        logAction(sessionCode, `PERGUNTA #${questionId} duplicada para #${newQuestion.id}`);
+        io.to(sessionCode).emit('questionsUpdated', session.questions);
+    });
+
+    // 7. DELETAR UMA PERGUNTA (NOVO em v1.17)
+    socket.on('deleteQuestion', ({ sessionCode, questionId }) => {
+        const session = sessions[sessionCode];
+        if (!session || !session.questions[questionId]) return;
+
+        if (session.activeQuestion === questionId) {
+            socket.emit('error', 'Não pode deletar pergunta ativa');
+            return;
+        }
+
+        session.questions.splice(questionId, 1);
+        logAction(sessionCode, `PERGUNTA #${questionId} deletada`);
+        io.to(sessionCode).emit('questionsUpdated', session.questions);
+    });
+
+    // 8. INICIAR UMA PERGUNTA
     socket.on('startQuestion', ({ sessionCode, questionId }) => {
         const session = sessions[sessionCode];
         if (session && session.questions[questionId]) {
             session.activeQuestion = questionId;
             const question = session.questions[questionId];
-            question.results = {}; // Reseta os resultados para a nova pergunta
+            question.results = {};
             question.acceptingAnswers = true;
             question.endTime = null;
+            
             if (question.timer && question.timer.duration > 0) {
-                // Calcula o horário de término com base no relógio do servidor
                 question.endTime = Date.now() + (question.timer.duration * 1000);
             }
             
@@ -144,13 +464,24 @@ io.on('connection', (socket) => {
                 question.results['no'] = 0;
             }
             
-            // Envia a pergunta para a plateia e para o telão
+            logAction(sessionCode, `PERGUNTA #${questionId} iniciada`);
             io.to(sessionCode).emit('newQuestion', { ...question });
-            console.log(`Sessão ${sessionCode}: iniciando pergunta ${questionId}`);
         }
     });
 
-    // 6. RECEBER RESPOSTA DA PLATEIA
+    // 9. PARAR UMA PERGUNTA (NOVO em v1.17)
+    socket.on('stopQuestion', ({ sessionCode, questionId }) => {
+        const session = sessions[sessionCode];
+        if (session && session.questions[questionId]) {
+            const question = session.questions[questionId];
+            question.acceptingAnswers = false;
+            
+            logAction(sessionCode, `PERGUNTA #${questionId} parada`);
+            io.to(sessionCode).emit('votingEnded', { questionId });
+        }
+    });
+
+    // 10. RECEBER RESPOSTA DA PLATEIA
     socket.on('submitAnswer', ({ sessionCode, questionId, answer }) => {
         const session = sessions[sessionCode];
         if (!session || session.activeQuestion !== questionId) return;
@@ -158,24 +489,24 @@ io.on('connection', (socket) => {
         const question = session.questions[questionId];
         
         if (!question.acceptingAnswers) {
-            console.log(`Resposta rejeitada para a pergunta ${questionId}: votação encerrada.`);
+            logger.debug(`Resposta rejeitada: votação encerrada para pergunta ${questionId}`);
             return;
         }
+
         if (question.endTime && Date.now() > question.endTime) {
-            console.log(`Resposta rejeitada para a pergunta ${questionId}: tempo esgotado.`);
             if (question.acceptingAnswers) {
                 question.acceptingAnswers = false;
                 io.to(sessionCode).emit('votingEnded', { questionId });
             }
             return;
         }
-        const { questionType } = question;
 
+        const { questionType } = question;
         if (questionType === 'options' || questionType === 'yes_no') {
             if (question.results.hasOwnProperty(answer)) {
                 question.results[answer]++;
             }
-        } else { // Para texto, número, etc.
+        } else {
             const sanitizedAnswer = String(answer).trim().slice(0, question.charLimit || 280);
             if (sanitizedAnswer) {
                 question.results[sanitizedAnswer] = (question.results[sanitizedAnswer] || 0) + 1;
@@ -183,49 +514,75 @@ io.on('connection', (socket) => {
         }
 
         if (session.questions[questionId]) {
-            // Envia os resultados atualizados para o telão e para o painel do apresentador
-            io.to(sessionCode).emit('updateResults', { results: question.results, questionType: question.questionType });
+            io.to(sessionCode).emit('updateResults', { 
+                results: question.results, 
+                questionType: question.questionType 
+            });
         }
     });
 
-    socket.on('disconnect', () => {
-        console.log(`Usuário (role: ${socket.role}) desconectado`);
-        const { sessionCode, role, id } = socket;
+    // 11. LOGOUT / DISCONNECT
+    socket.on('logout', () => {
+        const sessionCode = socket.sessionCode;
         if (sessionCode && sessions[sessionCode]) {
             const session = sessions[sessionCode];
-            if (role === 'audience') {
-                session.audienceCount--;
-            } else if (role === 'controller' && session.controllerSocketId === id) {
-                // Libera o slot de controller se o controller principal se desconectar
+            if (socket.role === 'controller') {
                 session.controllerSocketId = null;
-                console.log(`Controller da sessão ${sessionCode} desconectou. O slot está livre.`);
+            } else if (socket.role === 'presenter') {
+                session.presenterSocketIds = session.presenterSocketIds.filter(id => id !== socket.id);
+            } else if (socket.role === 'audience') {
+                session.audienceCount = Math.max(0, session.audienceCount - 1);
             }
+            logAction(sessionCode, `${socket.role.toUpperCase()} desconectado (logout)`);
         }
+        socket.disconnect();
     });
 
-    // 7. ENCERRAR SESSÃO (vindo do controller.html)
+    // 12. ENCERRAR SESSÃO (NOVO em v1.17)
     socket.on('endSession', ({ sessionCode }) => {
         if (sessions[sessionCode]) {
-            console.log(`Encerrando sessão ${sessionCode} a pedido do Controller.`);
-            // Notifica todos na sala que a sessão terminou
-            io.to(sessionCode).emit('sessionEnded', 'Esta sessão foi encerrada pelo apresentador.');
-            // Remove a sessão do objeto
+            logAction(sessionCode, 'ENCERRADA pelo controller');
+            io.to(sessionCode).emit('sessionEnded', { message: 'Sessão encerrada pelo controller' });
             delete sessions[sessionCode];
         }
     });
 
-    // 8. PARAR VOTAÇÃO (vindo do controller.html)
-    socket.on('stopVoting', ({ sessionCode, questionId }) => {
-        const session = sessions[sessionCode];
-        if (session && session.questions[questionId]) {
-            session.questions[questionId].acceptingAnswers = false;
-            console.log(`Votação encerrada manualmente para a pergunta ${questionId} na sessão ${sessionCode}`);
-            io.to(sessionCode).emit('votingEnded', { questionId });
+    // Disconnect automático
+    socket.on('disconnect', () => {
+        const sessionCode = socket.sessionCode;
+        if (sessionCode && sessions[sessionCode]) {
+            const session = sessions[sessionCode];
+            if (socket.role === 'controller' && session.controllerSocketId === socket.id) {
+                session.controllerSocketId = null;
+            } else if (socket.role === 'presenter') {
+                session.presenterSocketIds = session.presenterSocketIds.filter(id => id !== socket.id);
+            } else if (socket.role === 'audience') {
+                session.audienceCount = Math.max(0, session.audienceCount - 1);
+            }
+            logAction(sessionCode, `${socket.role.toUpperCase()} desconectado`);
         }
+        logger.info(`Usuário desconectado: ${socket.id}`);
     });
 });
 
+// ===== INICIAR SERVIDOR =====
 server.listen(PORT, () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
-    console.log(`Acesse o ponto de entrada em http://localhost:${PORT}/`);
+    logger.info(`========================================`);
+    logger.info(`🚀 MindPool Server iniciado`);
+    logger.info(`📌 Ambiente: ${NODE_ENV}`);
+    logger.info(`🌐 URL: http://localhost:${PORT}`);
+    logger.info(`🔐 Hashing de senhas: ${ENABLE_PASSWORD_HASHING && bcrypt ? 'ATIVO' : 'INATIVO'}`);
+    logger.info(`⚔️  Rate limiting: ${ENABLE_RATE_LIMITING ? 'ATIVO' : 'INATIVO'}`);
+    logger.info(`⏱️  Timeout de sessão: ${SESSION_TIMEOUT > 0 ? SESSION_TIMEOUT / 1000 + 's' : 'Nunca'}`);
+    logger.info(`========================================`);
+});
+
+// ===== TRATAMENTO DE ERROS =====
+process.on('unhandledRejection', (err) => {
+    logger.error(`Unhandled Promise Rejection: ${err.message}`);
+});
+
+process.on('uncaughtException', (err) => {
+    logger.error(`Uncaught Exception: ${err.message}`);
+    process.exit(1);
 });
