@@ -36,12 +36,12 @@ io.on('connection', (socket) => {
     console.log('Um usuário se conectou');
 
     // 1. CRIAR UMA NOVA SESSÃO (com senhas)
-    socket.on('createSession', ({ showerPassword, presenterPassword, deadline }, callback) => {
+    socket.on('createSession', ({ controllerPassword, presenterPassword, deadline }, callback) => {
         const sessionCode = generateSessionCode();
         sessions[sessionCode] = {
-            showerPassword,
+            controllerPassword,
             presenterPassword,
-            showerSocketId: null, // Garante que apenas um shower esteja conectado
+            controllerSocketId: null, // Garante que apenas um controller esteja conectado
             deadline: deadline || null,
             questions: [],
             activeQuestion: null,
@@ -52,29 +52,29 @@ io.on('connection', (socket) => {
         callback({ success: true, sessionCode });
     });
 
-    // 2. ENTRAR EM UMA SESSÃO (ADMIN: Shower ou Presenter)
+    // 2. ENTRAR EM UMA SESSÃO (ADMIN: Controller ou Presenter)
     socket.on('joinAdminSession', ({ sessionCode, password, role }, callback) => {
         if (!sessions[sessionCode]) {
             return callback({ success: false, message: 'Sessão não encontrada.' });
         }
 
         const session = sessions[sessionCode];
-        const expectedPassword = (role === 'shower') ? session.showerPassword : session.presenterPassword;
+        const expectedPassword = (role === 'controller') ? session.controllerPassword : session.presenterPassword;
 
         if (password !== expectedPassword) {
             return callback({ success: false, message: 'Senha incorreta.' });
         }
 
-        if (role === 'shower' && session.showerSocketId && session.showerSocketId !== socket.id) {
-            return callback({ success: false, message: 'Já existe um Shower ativo nesta sessão.' });
+        if (role === 'controller' && session.controllerSocketId && session.controllerSocketId !== socket.id) {
+            return callback({ success: false, message: 'Já existe um Controller ativo nesta sessão.' });
         }
 
         socket.join(sessionCode);
         socket.sessionCode = sessionCode; // Armazena o código no socket para o disconnect
         socket.role = role;
 
-        if (role === 'shower') {
-            session.showerSocketId = socket.id;
+        if (role === 'controller') {
+            session.controllerSocketId = socket.id;
         }
 
         console.log(`Usuário com role '${role}' entrou na sessão ${sessionCode}`);
@@ -105,7 +105,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 4. CRIAR UMA NOVA PERGUNTA (vindo do shower.html)
+    // 4. CRIAR UMA NOVA PERGUNTA (vindo do controller.html)
     socket.on('createQuestion', ({ sessionCode, question }) => {
         const session = sessions[sessionCode];
         if (session) {
@@ -118,12 +118,12 @@ io.on('connection', (socket) => {
                 charLimit: question.charLimit,
                 timer: question.timer,
                 results: {} });
-            // Notifica todos os admins (shower/presenter) que a lista de perguntas foi atualizada
+            // Notifica todos os admins (controller/presenter) que a lista de perguntas foi atualizada
             io.to(sessionCode).emit('questionsUpdated', session.questions);
         }
     });
 
-    // 5. INICIAR UMA PERGUNTA (vindo do shower.html)
+    // 5. INICIAR UMA PERGUNTA (vindo do controller.html)
     socket.on('startQuestion', ({ sessionCode, questionId }) => {
         const session = sessions[sessionCode];
         if (session && session.questions[questionId]) {
@@ -195,18 +195,18 @@ io.on('connection', (socket) => {
             const session = sessions[sessionCode];
             if (role === 'audience') {
                 session.audienceCount--;
-            } else if (role === 'shower' && session.showerSocketId === id) {
-                // Libera o slot de shower se o shower principal se desconectar
-                session.showerSocketId = null;
-                console.log(`Shower da sessão ${sessionCode} desconectou. O slot está livre.`);
+            } else if (role === 'controller' && session.controllerSocketId === id) {
+                // Libera o slot de controller se o controller principal se desconectar
+                session.controllerSocketId = null;
+                console.log(`Controller da sessão ${sessionCode} desconectou. O slot está livre.`);
             }
         }
     });
 
-    // 7. ENCERRAR SESSÃO (vindo do shower.html)
+    // 7. ENCERRAR SESSÃO (vindo do controller.html)
     socket.on('endSession', ({ sessionCode }) => {
         if (sessions[sessionCode]) {
-            console.log(`Encerrando sessão ${sessionCode} a pedido do Shower.`);
+            console.log(`Encerrando sessão ${sessionCode} a pedido do Controller.`);
             // Notifica todos na sala que a sessão terminou
             io.to(sessionCode).emit('sessionEnded', 'Esta sessão foi encerrada pelo apresentador.');
             // Remove a sessão do objeto
@@ -214,7 +214,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 8. PARAR VOTAÇÃO (vindo do shower.html)
+    // 8. PARAR VOTAÇÃO (vindo do controller.html)
     socket.on('stopVoting', ({ sessionCode, questionId }) => {
         const session = sessions[sessionCode];
         if (session && session.questions[questionId]) {

@@ -17,6 +17,18 @@ socket.emit('joinAdminSession', { sessionCode, role: 'controller' }, (response) 
         return;
     }
     sessionDeadline = response.deadline;
+
+    // Exibe os códigos de acesso se eles forem fornecidos na resposta
+    if (response.presenterPassword && response.showerPassword) {
+        const presenterPassEl = document.getElementById('presenter-password');
+        const showerPassEl = document.getElementById('shower-password');
+        const accessCodesEl = document.querySelector('.access-codes');
+
+        if (presenterPassEl) presenterPassEl.innerText = response.presenterPassword;
+        if (showerPassEl) showerPassEl.innerText = response.showerPassword;
+        if (accessCodesEl) accessCodesEl.style.display = 'block';
+    }
+
     if (sessionDeadline) {
         const deadlineAlertEl = document.createElement('div');
         deadlineAlertEl.id = 'deadline-alert';

@@ -16,7 +16,7 @@ const showJoinBtn = document.getElementById('show-join-session-btn');
 // Formulário de Nova Sessão
 const newSessionForm = document.getElementById('new-session-form');
 const createSessionBtn = document.getElementById('create-session-btn');
-const newShowerPassInput = document.getElementById('new-shower-pass');
+const newControllerPassInput = document.getElementById('new-controller-pass');
 const newPresenterPassInput = document.getElementById('new-presenter-pass');
 const deadlineInput = document.getElementById('session-deadline');
 
@@ -40,7 +40,7 @@ if (!role) {
     showJoinBtn.style.display = 'none';
 } else {
     pageTitle.innerText = `Acesso: ${role.charAt(0).toUpperCase() + role.slice(1)}`;
-    if (role !== 'shower') {
+    if (role !== 'controller') {
         showNewBtn.style.display = 'none';
         showForm('join');
     }
@@ -52,17 +52,17 @@ showJoinBtn?.addEventListener('click', () => showForm('join'));
 
 // Lógica de Criação de Sessão (Botão "Criar e Entrar")
 createSessionBtn?.addEventListener('click', () => {
-    const showerPassword = newShowerPassInput.value;
+    const controllerPassword = newControllerPassInput.value;
     const presenterPassword = newPresenterPassInput.value;
     const deadlineValue = deadlineInput.value;
     const deadline = deadlineValue ? new Date(deadlineValue).getTime() : null;
 
-    if (!showerPassword || !presenterPassword) {
+    if (!controllerPassword || !presenterPassword) {
         errorMsg.innerText = 'Por favor, preencha ambas as senhas.';
         return;
     }
 
-    socket.emit('createSession', { showerPassword, presenterPassword, deadline }, (response) => {
+    socket.emit('createSession', { controllerPassword, presenterPassword, deadline }, (response) => {
         if (response.success) {
             window.location.href = `/pages/controller.html?session=${response.sessionCode}`;
         } else {
@@ -83,7 +83,7 @@ joinSessionBtn?.addEventListener('click', () => {
 
     socket.emit('joinAdminSession', { sessionCode, password, role }, (response) => {
         if (response.success) {
-            const targetPage = role === 'shower' ? 'controller' : role;
+            const targetPage = role === 'controller' ? 'controller' : role;
             window.location.href = `/pages/${targetPage}.html?session=${sessionCode}`;
         } else {
             errorMsg.innerText = response.message || 'Falha ao entrar na sessão.';
