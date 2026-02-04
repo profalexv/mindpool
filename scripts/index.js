@@ -1,6 +1,30 @@
-document.getElementById('audience-join-btn').addEventListener('click', () => {
-    const code = document.getElementById('audience-session-code').value.toUpperCase();
-    if (code) window.location.href = `/pages/audience.html?session=${code}`;
+document.addEventListener('DOMContentLoaded', function () {
+    const audienceJoinBtn = document.getElementById('audience-join-btn');
+    const controllerLoginBtn = document.getElementById('controller-login-btn');
+    const presenterLoginBtn = document.getElementById('presenter-login-btn');
+    const audienceSessionCodeInput = document.getElementById('audience-session-code');
+
+    if (audienceJoinBtn && audienceSessionCodeInput) {
+        audienceJoinBtn.addEventListener('click', () => {
+            const sessionCode = audienceSessionCodeInput.value.trim().toUpperCase();
+            if (sessionCode) {
+                window.location.href = `/pages/audience.html?session=${sessionCode}`;
+            } else {
+                alert('Por favor, insira o código da sessão.');
+                audienceSessionCodeInput.focus();
+            }
+        });
+    }
+
+    if (controllerLoginBtn) {
+        controllerLoginBtn.addEventListener('click', () => {
+            window.location.href = '/pages/admin.html?role=controller';
+        });
+    }
+
+    if (presenterLoginBtn) {
+        presenterLoginBtn.addEventListener('click', () => {
+            window.location.href = '/pages/admin.html?role=presenter';
+        });
+    }
 });
-document.getElementById('shower-login-btn').addEventListener('click', () => window.location.href = '/pages/admin.html?role=shower');
-document.getElementById('presenter-login-btn').addEventListener('click', () => window.location.href = '/pages/admin.html?role=presenter');
