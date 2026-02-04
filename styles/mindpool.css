@@ -1,5 +1,109 @@
-body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f0f2f5; }
-.container { text-align: center; }
-button { font-size: 1.2em; padding: 15px 30px; margin: 10px; cursor: pointer; border: none; border-radius: 5px; background-color: #4a90e2; color: white; }
-button:hover { background-color: #357abd; }
-#feedback { margin-top: 20px; color: green; font-weight: bold; }
+/* ===== LAYOUT PRINCIPAL ===== */
+body { 
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+    display: flex; 
+    justify-content: center; 
+    align-items: center; 
+    min-height: 100vh; 
+    background-color: #f0f2f5; 
+    padding: 20px;
+}
+
+.container { 
+    text-align: center; 
+    background-color: white;
+    padding: 40px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    max-width: 500px;
+    width: 100%;
+}
+
+/* ===== BOTÕES GLOBAIS ===== */
+button { 
+    font-size: 1.2em; 
+    padding: 15px 30px; 
+    margin: 10px; 
+    cursor: pointer; 
+    border: none; 
+    border-radius: 5px; 
+    background-color: #4a90e2; 
+    color: white;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+button:hover { 
+    background-color: #357abd;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* ===== SEÇÕES DE FORMULÁRIO ===== */
+.form-section { 
+    display: none; 
+}
+
+.form-section.active { 
+    display: block;
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ===== FEEDBACK ===== */
+#feedback { 
+    margin-top: 20px; 
+    color: green; 
+    font-weight: bold; 
+}
+
+#error-message {
+    color: #e74c3c;
+    font-weight: bold;
+    padding: 10px;
+    margin-bottom: 15px;
+    border-radius: 4px;
+    background-color: #fadbd8;
+    display: none;
+    border-left: 4px solid #e74c3c;
+}
+
+#error-message:not(:empty) {
+    display: block;
+}
+
+#success-message {
+    color: #27ae60;
+    background-color: #d5f4e6;
+    padding: 12px;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    border-left: 4px solid #27ae60;
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

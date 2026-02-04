@@ -73,12 +73,15 @@
         <p id="error-message" style="color: red;"></p>
 
         <!-- Botões de Ação Principal -->
-        <div id="action-buttons" style="margin-bottom: 30px; display: none;">
+        <div id="action-buttons" style="margin-bottom: 30px;">
             <button id="create-session-main-btn" style="background-color: #27ae60; font-size: 1.1em; padding: 20px 40px;">
                 ➕ CRIAR SESSÃO
             </button>
             <button id="join-session-main-btn" style="background-color: #3498db; font-size: 1.1em; padding: 20px 40px;">
                 🔗 ENTRAR EM SESSÃO
+            </button>
+            <button id="history-btn" style="background-color: #9b59b6; font-size: 1.1em; padding: 20px 40px; margin-top: 10px;">
+                📋 Histórico
             </button>
         </div>
 
@@ -88,8 +91,8 @@
                 <button id="back-to-menu-btn" style="background-color: #95a5a6; padding: 8px 16px; font-size: 0.9em;">← Voltar</button>
             </div>
             <h2>Criar Nova Sessão</h2>
-            <label for="session-deadline" style="display: block; margin-top: 10px; text-align: left; width: 80%; margin-left: auto; margin-right: auto;">Prazo Final da Sessão (Opcional)</label>
-            <input type="datetime-local" id="session-deadline">
+            <label for="session-deadline" style="display: block; margin-top: 10px; text-align: left; width: 80%; margin-left: auto; margin-right: auto;">Horário Final da Sessão (Opcional)</label>
+            <input type="time" id="session-deadline">
             <input type="password" id="new-controller-pass" placeholder="Crie uma senha para o Controller">
             <input type="password" id="new-presenter-pass" placeholder="Crie uma senha para o Presenter">
             <button id="create-session-btn">Criar e Entrar</button>

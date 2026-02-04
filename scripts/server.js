@@ -228,20 +228,6 @@ io.on('connection', (socket) => {
                 });
             }
 
-            if (controllerPassword === presenterPassword) {
-                return callback({ 
-                    success: false, 
-                    message: 'Senhas do Controller e Presenter devem ser diferentes.' 
-                });
-            }
-
-            if (deadline && deadline < Date.now()) {
-                return callback({ 
-                    success: false, 
-                    message: 'O prazo não pode ser no passado.' 
-                });
-            }
-
             // Hash de senhas
             let hashController = controllerPassword;
             let hashPresenter = presenterPassword;

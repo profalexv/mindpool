@@ -153,13 +153,17 @@ function renderHistory() {
     
     if (history.length === 0) {
         historyDiv.innerHTML = `
+            <div style="text-align: right; margin-bottom: 10px;">
+                <button id="close-history-btn-top" style="background-color: #95a5a6; padding: 8px 16px; font-size: 0.9em;">← Voltar</button>
+            </div>
             <h2>Histórico de Sessões</h2>
             <p style="text-align: center; color: #999;">Nenhuma sessão anterior</p>
-            <button id="close-history-btn" class="btn btn-secondary">Voltar</button>
+            <button id="close-history-btn" class="btn btn-secondary">← Voltar</button>
         `;
     } else {
-        let html = `
-            <h2>Histórico de Sessões</h2>
+        let html = `            <div style="text-align: right; margin-bottom: 10px;">
+                <button id="close-history-btn-top" style="background-color: #95a5a6; padding: 8px 16px; font-size: 0.9em;">← Voltar</button>
+            </div>            <h2>Histórico de Sessões</h2>
             <div style="max-height: 400px; overflow-y: auto;">
         `;
         
@@ -193,7 +197,7 @@ function renderHistory() {
                 Limpar Todo Histórico
             </button>
             <button id="close-history-btn" class="btn btn-secondary" style="width: 100%; margin-top: 5px;">
-                Voltar
+                ← Voltar
             </button>
         `;
         
@@ -241,6 +245,7 @@ function renderHistory() {
     newSessionForm.classList.remove('active');
     joinSessionForm.classList.remove('active');
     
+    document.getElementById('close-history-btn-top')?.addEventListener('click', showMainMenu);
     document.getElementById('close-history-btn').addEventListener('click', showMainMenu);
 }
 
@@ -294,7 +299,8 @@ createSessionBtn?.addEventListener('click', () => {
     const controllerPassword = newControllerPassInput.value.trim();
     const presenterPassword = newPresenterPassInput.value.trim();
     const deadlineValue = deadlineInput.value;
-    const deadline = deadlineValue ? new Date(deadlineValue).getTime() : null;
+    // Converter horário para deadline (hoje + horário fornecido)
+    const deadline = deadlineValue ? new Date(new Date().toDateString() + ' ' + deadlineValue).getTime() : null;
 
     clearError();
 
@@ -310,16 +316,6 @@ createSessionBtn?.addEventListener('click', () => {
 
     if (presenterPassword.length < 4) {
         showError('A senha do Presenter deve ter pelo menos 4 caracteres.');
-        return;
-    }
-
-    if (controllerPassword === presenterPassword) {
-        showError('As senhas do Controller e Presenter devem ser diferentes.');
-        return;
-    }
-
-    if (deadline && deadline < Date.now()) {
-        showError('O prazo não pode ser no passado.');
         return;
     }
 
