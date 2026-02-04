@@ -7,7 +7,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ["https://mindpool.alexandre.pro.br", "http://mindpool.alexandre.pro.br"],
+    origin: ["https://mindpool.alexandre.pro.br", "http://mindpool.alexandre.pro.br", "https://www.mindpool.alexandre.pro.br", "http://www.mindpool.alexandre.pro.br"],
     methods: ["GET", "POST"],
     credentials: true
   },
