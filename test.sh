@@ -69,14 +69,6 @@ echo "======================================"
 # Teste 1: Health Check
 test_endpoint "Health Check" "GET" "/health"
 
-# Teste 2: Criar Sessão
-echo ""
-echo "🔑 TESTANDO CRIAÇÃO DE SESSÃO"
-echo "======================================"
-create_response=$(curl -s -X POST -H "Content-Type: application/json" \
-    -d '{"controllerPassword":"admin123","presenterPassword":"presenter456","deadline":null}' \
-    "http://localhost:3000/health")  # Placeholder
-
 # ===== TESTES COM SOCKET.IO (JavaScript) =====
 
 if command -v node &> /dev/null; then
@@ -230,14 +222,14 @@ echo "📁 VERIFICANDO ARQUIVOS"
 echo "======================================"
 
 files_to_check=(
-    "scripts/server-v2.js"
-    "scripts/admin-v2.js"
+    "scripts/server.js"
+    "scripts/admin.js"
     "scripts/.env"
     "scripts/start.sh"
-    "INSTALACAO.md"
-    "GUIA_ATUALIZACAO_v1.17.md"
-    "API_EXEMPLOS.md"
-    "RESUMO_ENTREGA.md"
+    "files/INSTALACAO.md"
+    "files/GUIA_ATUALIZACAO_v1.17.md"
+    # "files/API_EXEMPLOS.md" # Arquivo ausente
+    "files/RESUMO_ENTREGA.md"
 )
 
 for file in "${files_to_check[@]}"; do

@@ -30,7 +30,7 @@ case $AMBIENTE in
         echo "🔗 Frontend: http://localhost:3000"
         echo "🔗 Backend: http://localhost:3000"
         echo ""
-        NODE_ENV=local PORT=3000 node server-v2.js
+        NODE_ENV=local PORT=3000 node server.js
         ;;
     
     dev)
@@ -38,11 +38,11 @@ case $AMBIENTE in
         echo "💡 Dica: Instale com: npm install -g nodemon"
         echo ""
         if command -v nodemon &> /dev/null; then
-            NODE_ENV=local PORT=3000 nodemon server-v2.js
+            NODE_ENV=local PORT=3000 nodemon server.js
         else
             echo "⚠️  nodemon não encontrado. Use: npm install -g nodemon"
             echo "Iniciando com 'node' em vez disso..."
-            NODE_ENV=local PORT=3000 node server-v2.js
+            NODE_ENV=local PORT=3000 node server.js
         fi
         ;;
     
@@ -51,7 +51,7 @@ case $AMBIENTE in
         echo "🔗 Frontend: https://mindpool.alexandre.pro.br"
         echo "🔗 Backend: https://mindpool-backend.onrender.com"
         echo ""
-        NODE_ENV=production node server-v2.js
+        NODE_ENV=production node server.js
         ;;
     
     *)

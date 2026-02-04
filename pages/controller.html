@@ -4,33 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Painel de Controle</title>
-    <style>
-        body { font-family: sans-serif; padding: 20px; }
-        .question-form, .question-list, .timer-config { border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; border-radius: 8px; }
-        input, button { font-size: 1em; padding: 8px; margin: 5px 0; }
-        .type-config {
-            display: none;
-            margin-top: 10px;
-        }
-        .question-item { border-bottom: 1px solid #eee; padding: 10px 0; }
-        .question-item:last-child { border-bottom: none; }
-        .question-item.warning {
-            background-color: #fcf8e3;
-            border-left: 5px solid #f0ad4e;
-        }
-    </style>
+    <link rel="stylesheet" href="/styles/mindpool.css">
 </head>
-<body>
+<body class="controller-page">
     <h1>Painel de Controle - Sessão <span id="session-code"></span></h1>
     <div>
-        <button id="end-session-btn" style="background-color: #d9534f; margin-bottom: 20px;">Encerrar Sessão</button>
+        <button id="open-presenter-btn">Abrir Apresentação</button>
+        <button id="end-session-btn">Encerrar Sessão</button>
     </div>
     
     <div class="question-form">
         <h2>Criar Nova Pergunta</h2>
         <input type="text" id="question-text" placeholder="Texto da pergunta">
 
-        <label for="question-type" style="margin-top: 10px; display: block;">Tipo de Resposta:</label>
+        <label for="question-type">Tipo de Resposta:</label>
         <select id="question-type">
             <option value="options" selected>Opções (múltipla escolha)</option>
             <option value="yes_no">Sim / Não</option>
@@ -40,7 +27,7 @@
             <option value="integer">Número (inteiro)</option>
         </select>
 
-        <div id="options-config" class="type-config" style="display: block;">
+        <div id="options-config" class="type-config active">
             <input type="text" id="question-options" placeholder="Opções separadas por vírgula (ex: Opção 1,Opção 2)">
         </div>
         <div id="text-config" class="type-config">
@@ -51,7 +38,7 @@
             <label>
                 <input type="checkbox" id="timer-enabled"> Habilitar Cronômetro
             </label>
-            <div id="timer-options" style="display: none; margin-top: 10px;">
+            <div id="timer-options">
                 <input type="number" id="timer-duration" placeholder="Duração em minutos (ex: 1)">
                 <label>
                     <input type="checkbox" id="timer-show-audience"> Exibir para a audiência

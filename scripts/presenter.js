@@ -1,8 +1,36 @@
-const socket = io("https://mindpool-backend.onrender.com", {
+const getBackendUrl = () => {
+    const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    return isDevelopment ? 'http://localhost:3000' : 'https://mindpool-backend.onrender.com';
+};
+
+const socket = io(getBackendUrl(), {
     transports: ['websocket', 'polling'],
-    withCredentials: true
+    withCredentials: true,
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    reconnectionAttempts: 5
 });
-const sessionCode = new URLSearchParams(window.location.search).get('session');
+
+function getSessionPassword() {
+    // 1. Tenta obter a senha do sessionStorage da aba atual.
+    let password = sessionStorage.getItem('mindpool_session_pass');
+    if (password) console.log('INFO: Senha encontrada no sessionStorage da aba.');
+
+    // 2. Se não encontrar, verifica se foi passada uma senha temporária de outra aba via localStorage.
+    if (!password) {
+        const tempPass = localStorage.getItem('mindpool_temp_pass');
+        if (tempPass) {
+            console.log('INFO: Senha temporária encontrada no localStorage, movendo para sessionStorage.');
+            password = tempPass;
+            sessionStorage.setItem('mindpool_session_pass', tempPass); // Move para o sessionStorage desta aba
+            localStorage.removeItem('mindpool_temp_pass'); // Limpa o localStorage para não ser reutilizado
+        }
+    }
+
+    if (!password) console.error('ERRO CRÍTICO: Nenhuma senha encontrada para autenticação do presenter.');
+    return password;
+}
 
 const waitingScreen = document.getElementById('waiting-screen');
 const questionScreen = document.getElementById('question-screen');
@@ -10,13 +38,15 @@ const resultsContainer = document.getElementById('results-container');
 const wordCloudContainer = document.getElementById('word-cloud-container');
 const presenterTimerEl = document.getElementById('presenter-timer');
 let currentTimer = null;
+let currentQuestion = null; // Armazena a pergunta atual completa
 let sessionDeadline = null;
 
 // 1. Configuração Inicial
+const sessionCodeForDisplay = new URLSearchParams(window.location.search).get('session');
 const sessionCodeDisplay = document.getElementById('session-code-display');
-if (sessionCodeDisplay) sessionCodeDisplay.innerText = sessionCode;
+if (sessionCodeDisplay) sessionCodeDisplay.innerText = sessionCodeForDisplay;
 
-const audienceUrl = `${window.location.origin}/pages/audience.html?session=${sessionCode}`;
+const audienceUrl = `${window.location.origin}/pages/audience.html?session=${sessionCodeForDisplay}`;
 const qrcodeContainer = document.getElementById("qrcode");
 if (qrcodeContainer) {
     new QRCode(qrcodeContainer, {
@@ -26,29 +56,42 @@ if (qrcodeContainer) {
     });
 }
 
-// A autenticação agora é feita na página admin.html
-socket.emit('joinAdminSession', { sessionCode, role: 'presenter' }, (response) => {
-    if (!response.success) {
-        alert(response.message);
+function joinPresenterSession() {
+    const sessionCode = new URLSearchParams(window.location.search).get('session');
+    const sessionPassword = getSessionPassword();
+
+    if (!sessionPassword) {
+        console.error('Falha na autenticação: senha não encontrada no sessionStorage ou localStorage.');
+        alert('Erro de autenticação. A sessão pode ter expirado ou a senha não foi fornecida. Por favor, tente entrar novamente.');
         window.location.href = `/pages/admin.html?role=presenter`;
         return;
     }
-    sessionDeadline = response.deadline;
-    if (sessionDeadline) {
-        const deadlineAlertEl = document.getElementById('deadline-alert');
-        if (deadlineAlertEl) {
-            setInterval(() => {
-                if (Date.now() > sessionDeadline) {
-                    deadlineAlertEl.style.display = 'block';
-                }
-            }, 5000);
-        }
-    }
+    socket.emit('joinAdminSession', { sessionCode, password: sessionPassword, role: 'presenter' }, (response) => {        
+        // Não remover a senha do sessionStorage para permitir que a re-autenticação em 'connect' funcione.
 
-});
+        if (!response.success) {
+            alert(response.message);
+            window.location.href = `/pages/admin.html?role=presenter`;
+            return;
+        }
+
+        sessionDeadline = response.deadline;
+        if (sessionDeadline) {
+            const deadlineAlertEl = document.getElementById('deadline-alert');
+            if (deadlineAlertEl) {
+                setInterval(() => {
+                    if (Date.now() > sessionDeadline) {
+                        deadlineAlertEl.style.display = 'block';
+                    }
+                }, 5000);
+            }
+        }
+    });
+}
 
 // 2. Ouvir por novas perguntas
 socket.on('newQuestion', (question) => {
+    currentQuestion = question; // Armazena a pergunta para uso posterior (ex: renderBarResults)
     // Para e limpa qualquer cronômetro anterior
     if (currentTimer) {
         currentTimer.stop();
@@ -111,14 +154,23 @@ socket.on('updateResults', ({ results, questionType }) => {
 });
 
 function renderBarResults(results) {
-    // Esta função precisa das opções da pergunta, que não vêm no 'updateResults'.
-    // Uma melhoria seria o servidor enviar o objeto da pergunta completo.
-    // Por enquanto, vamos exibir de forma simples.
-    if (!resultsContainer) return;
+    if (!resultsContainer || !currentQuestion || !currentQuestion.options) return;
+
+    const totalVotes = Object.values(results).reduce((sum, count) => sum + count, 0);
+
     let html = '';
-    for (const [option, count] of Object.entries(results)) {
-        html += `<p>${option}: ${count}</p>`;
-    }
+    currentQuestion.options.forEach(option => {
+        const count = results[option.id] || 0;
+        const percentage = totalVotes > 0 ? ((count / totalVotes) * 100).toFixed(0) : 0;
+        
+        html += `
+            <div class="result-bar-container">
+                <span>${option.text} (${count})</span>
+                <div class="result-bar" style="width: ${percentage}%;">
+                    ${percentage > 10 ? percentage + '%' : ''}
+                </div>
+            </div>`;
+    });
     resultsContainer.innerHTML = html;
 }
 
@@ -156,4 +208,17 @@ socket.on('error', (message) => alert(message));
 socket.on('sessionEnded', (message) => {
     alert(message);
     window.location.href = '/';
+});
+
+socket.on('connect_error', (error) => {
+    console.error('❌ Erro de conexão com o Presenter:', error);
+});
+
+socket.on('disconnect', (reason) => {
+    console.warn('⚠️ Presenter desconectado do servidor:', reason);
+});
+
+socket.on('connect', () => {
+    console.log('✅ Conectado ao servidor. Autenticando presenter...');
+    joinPresenterSession();
 });
