@@ -9,10 +9,6 @@ const role = params.get('role');
 const pageTitle = document.getElementById('page-title');
 const errorMsg = document.getElementById('error-message');
 
-// Botões de alternância de formulário
-const showNewBtn = document.getElementById('show-new-session-btn');
-const showJoinBtn = document.getElementById('show-join-session-btn');
-
 // Formulário de Nova Sessão
 const newSessionForm = document.getElementById('new-session-form');
 const createSessionBtn = document.getElementById('create-session-btn');
@@ -26,30 +22,22 @@ const joinSessionBtn = document.getElementById('join-session-btn');
 const joinSessionCodeInput = document.getElementById('join-session-code');
 const joinSessionPassInput = document.getElementById('join-session-pass');
 
-// --- Funções Auxiliares ---
-function showForm(formToShow) {
-    newSessionForm.classList.toggle('active', formToShow === 'new');
-    joinSessionForm.classList.toggle('active', formToShow === 'join');
-}
-
 // --- Validação e Configuração Inicial da UI ---
 if (!role) {
     // Ponto de entrada principal para o painel administrativo, sem role na URL.
     pageTitle.innerText = 'Acesso Administrativo';
+    // Mostra ambos os formulários.
+    newSessionForm.classList.add('active');
+    joinSessionForm.classList.add('active');
 } else if (role === 'presenter') {
     pageTitle.innerText = `Acesso: ${role.charAt(0).toUpperCase() + role.slice(1)}`;
-    showNewBtn.style.display = 'none';
-    showForm('join');
+    // Para o presenter, mostra apenas o formulário de entrar em sessão.
+    newSessionForm.style.display = 'none';
+    joinSessionForm.classList.add('active');
 } else { // Trata roles desconhecidas ou inválidas
     pageTitle.innerText = 'Erro de Acesso';
     errorMsg.innerText = `Função (role) "${role}" é inválida.`;
-    showNewBtn.style.display = 'none';
-    showJoinBtn.style.display = 'none';
 }
-
-// --- Event Listeners ---
-showNewBtn?.addEventListener('click', () => showForm('new'));
-showJoinBtn?.addEventListener('click', () => showForm('join'));
 
 // Lógica de Criação de Sessão (Botão "Criar e Entrar")
 createSessionBtn?.addEventListener('click', () => {
