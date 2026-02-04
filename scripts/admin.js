@@ -23,8 +23,8 @@ const joinSessionCodeInput = document.getElementById('join-session-code');
 const joinSessionPassInput = document.getElementById('join-session-pass');
 
 // --- Validação e Configuração Inicial da UI ---
-if (!role) {
-    // Ponto de entrada principal para o painel administrativo, sem role na URL.
+if (!role || role === 'controller') {
+    // Ponto de entrada principal para o painel administrativo.
     pageTitle.innerText = 'Acesso Administrativo';
     // Mostra ambos os formulários.
     newSessionForm.classList.add('active');
@@ -37,6 +37,9 @@ if (!role) {
 } else { // Trata roles desconhecidas ou inválidas
     pageTitle.innerText = 'Erro de Acesso';
     errorMsg.innerText = `Função (role) "${role}" é inválida.`;
+    // Garante que os formulários fiquem escondidos em caso de erro.
+    newSessionForm.style.display = 'none';
+    joinSessionForm.style.display = 'none';
 }
 
 // Lógica de Criação de Sessão (Botão "Criar e Entrar")
