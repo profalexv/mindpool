@@ -49,7 +49,7 @@ document.getElementById('create-session-btn')?.addEventListener('click', () => {
 
     socket.emit('createSession', { showerPassword, presenterPassword, deadline }, (response) => {
         if (response.success) {
-            window.location.href = `/pages/shower.html?session=${response.sessionCode}`;
+            window.location.href = `/pages/controller.html?session=${response.sessionCode}`;
         } else {
             errorMsg.innerText = response.message || 'Ocorreu um erro ao criar a sessão.';
         }
@@ -68,7 +68,8 @@ document.getElementById('join-session-btn')?.addEventListener('click', () => {
 
     socket.emit('joinAdminSession', { sessionCode, password, role }, (response) => {
         if (response.success) {
-            window.location.href = `/pages/${role}.html?session=${sessionCode}`;
+            const targetPage = role === 'shower' ? 'controller' : role;
+            window.location.href = `/pages/${targetPage}.html?session=${sessionCode}`;
         } else {
             errorMsg.innerText = response.message || 'Falha ao entrar na sessão.';
         }
