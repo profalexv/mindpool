@@ -1,6 +1,7 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require("socket.io");
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
@@ -28,8 +29,8 @@ function generateSessionCode() {
 }
 
 // Servir arquivos estáticos da raiz do projeto.
-// Isso permite que /pages/audience.html acesse /styles/audience.css e /scripts/audience.js
-app.use(express.static(__dirname));
+// Isso permite que o servidor entregue os arquivos HTML, CSS e JS a partir da pasta raiz do projeto.
+app.use(express.static(path.join(__dirname, '..')));
 
 io.on('connection', (socket) => {
     console.log('Um usuário se conectou');

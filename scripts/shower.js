@@ -1,4 +1,7 @@
-const socket = io();
+const socket = io("https://mindpool-backend.onrender.com", {
+    transports: ['websocket', 'polling'],
+    withCredentials: true
+});
 const sessionCode = new URLSearchParams(window.location.search).get('session');
 
 const sessionCodeDisplay = document.getElementById('session-code');
