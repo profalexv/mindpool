@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (controllerLoginBtn) {
         controllerLoginBtn.addEventListener('click', () => {
-            window.location.href = '/pages/admin.html?role=controller';
+            window.location.href = '/pages/admin.html';
         });
     }
 

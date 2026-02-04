@@ -34,16 +34,17 @@ function showForm(formToShow) {
 
 // --- Validação e Configuração Inicial da UI ---
 if (!role) {
+    // Ponto de entrada principal para o painel administrativo, sem role na URL.
+    pageTitle.innerText = 'Acesso Administrativo';
+} else if (role === 'presenter') {
+    pageTitle.innerText = `Acesso: ${role.charAt(0).toUpperCase() + role.slice(1)}`;
+    showNewBtn.style.display = 'none';
+    showForm('join');
+} else { // Trata roles desconhecidas ou inválidas
     pageTitle.innerText = 'Erro de Acesso';
-    errorMsg.innerText = 'Função (role) não especificada. Por favor, volte à página inicial.';
+    errorMsg.innerText = `Função (role) "${role}" é inválida.`;
     showNewBtn.style.display = 'none';
     showJoinBtn.style.display = 'none';
-} else {
-    pageTitle.innerText = `Acesso: ${role.charAt(0).toUpperCase() + role.slice(1)}`;
-    if (role !== 'controller') {
-        showNewBtn.style.display = 'none';
-        showForm('join');
-    }
 }
 
 // --- Event Listeners ---
@@ -81,10 +82,12 @@ joinSessionBtn?.addEventListener('click', () => {
         return;
     }
 
-    socket.emit('joinAdminSession', { sessionCode, password, role }, (response) => {
+    // Se 'role' não estiver na URL, assume-se que é o 'controller' (administrador) tentando entrar.
+    const roleToJoin = role || 'controller';
+    socket.emit('joinAdminSession', { sessionCode, password, role: roleToJoin }, (response) => {
         if (response.success) {
-            const targetPage = role === 'controller' ? 'controller' : role;
-            window.location.href = `/pages/${targetPage}.html?session=${sessionCode}`;
+            const targetPage = roleToJoin === 'controller' ? 'controller' : roleToJoin;
+            window.location.href = `/pages/${targetPage}.html?session=${sessionCode}`; // Redireciona para controller.html ou presenter.html
         } else {
             errorMsg.innerText = response.message || 'Falha ao entrar na sessão.';
         }
