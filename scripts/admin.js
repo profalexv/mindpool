@@ -5,42 +5,57 @@ const socket = io("https://mindpool-backend.onrender.com", {
 const params = new URLSearchParams(window.location.search);
 const role = params.get('role');
 
+// --- Seleção de Elementos do DOM ---
 const pageTitle = document.getElementById('page-title');
 const errorMsg = document.getElementById('error-message');
-const newSessionForm = document.getElementById('new-session-form');
-const joinSessionForm = document.getElementById('join-session-form');
+
+// Botões de alternância de formulário
 const showNewBtn = document.getElementById('show-new-session-btn');
 const showJoinBtn = document.getElementById('show-join-session-btn');
 
-// Configuração inicial da UI
-if (pageTitle) {
+// Formulário de Nova Sessão
+const newSessionForm = document.getElementById('new-session-form');
+const createSessionBtn = document.getElementById('create-session-btn');
+const newShowerPassInput = document.getElementById('new-shower-pass');
+const newPresenterPassInput = document.getElementById('new-presenter-pass');
+const deadlineInput = document.getElementById('session-deadline');
+
+// Formulário de Entrar em Sessão
+const joinSessionForm = document.getElementById('join-session-form');
+const joinSessionBtn = document.getElementById('join-session-btn');
+const joinSessionCodeInput = document.getElementById('join-session-code');
+const joinSessionPassInput = document.getElementById('join-session-pass');
+
+// --- Funções Auxiliares ---
+function showForm(formToShow) {
+    newSessionForm.classList.toggle('active', formToShow === 'new');
+    joinSessionForm.classList.toggle('active', formToShow === 'join');
+}
+
+// --- Validação e Configuração Inicial da UI ---
+if (!role) {
+    pageTitle.innerText = 'Erro de Acesso';
+    errorMsg.innerText = 'Função (role) não especificada. Por favor, volte à página inicial.';
+    showNewBtn.style.display = 'none';
+    showJoinBtn.style.display = 'none';
+} else {
     pageTitle.innerText = `Acesso: ${role.charAt(0).toUpperCase() + role.slice(1)}`;
-}
-if (role !== 'shower') {
-    if (showNewBtn) showNewBtn.style.display = 'none';
-    if (joinSessionForm) joinSessionForm.classList.add('active');
-}
-
-if (showNewBtn) {
-    showNewBtn.addEventListener('click', () => {
-        newSessionForm.classList.add('active');
-        joinSessionForm.classList.remove('active');
-    });
+    if (role !== 'shower') {
+        showNewBtn.style.display = 'none';
+        showForm('join');
+    }
 }
 
-if (showJoinBtn) {
-    showJoinBtn.addEventListener('click', () => {
-        joinSessionForm.classList.add('active');
-        newSessionForm.classList.remove('active');
-    });
-}
+// --- Event Listeners ---
+showNewBtn?.addEventListener('click', () => showForm('new'));
+showJoinBtn?.addEventListener('click', () => showForm('join'));
 
-// Lógica de Criação de Sessão
-document.getElementById('create-session-btn')?.addEventListener('click', () => {
-    const showerPassword = document.getElementById('new-shower-pass').value;
-    const presenterPassword = document.getElementById('new-presenter-pass').value;
-    const deadlineInput = document.getElementById('session-deadline').value;
-    const deadline = deadlineInput ? new Date(deadlineInput).getTime() : null;
+// Lógica de Criação de Sessão (Botão "Criar e Entrar")
+createSessionBtn?.addEventListener('click', () => {
+    const showerPassword = newShowerPassInput.value;
+    const presenterPassword = newPresenterPassInput.value;
+    const deadlineValue = deadlineInput.value;
+    const deadline = deadlineValue ? new Date(deadlineValue).getTime() : null;
 
     if (!showerPassword || !presenterPassword) {
         errorMsg.innerText = 'Por favor, preencha ambas as senhas.';
@@ -56,10 +71,10 @@ document.getElementById('create-session-btn')?.addEventListener('click', () => {
     });
 });
 
-// Lógica para Entrar em Sessão
-document.getElementById('join-session-btn')?.addEventListener('click', () => {
-    const sessionCode = document.getElementById('join-session-code').value.toUpperCase();
-    const password = document.getElementById('join-session-pass').value;
+// Lógica para Entrar em Sessão (Botão "Entrar")
+joinSessionBtn?.addEventListener('click', () => {
+    const sessionCode = joinSessionCodeInput.value.toUpperCase();
+    const password = joinSessionPassInput.value;
 
     if (!sessionCode || !password) {
         errorMsg.innerText = 'Código e senha são obrigatórios.';
