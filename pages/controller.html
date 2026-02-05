@@ -5,58 +5,296 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Painel de Controle</title>
     <link rel="stylesheet" href="/styles/mindpool.css">
+    <style>
+        /* --- Layout Principal --- */
+        .controller-page {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            background-color: var(--background-color, #f0f2f5);
+            color: var(--text-color, #333);
+        }
+        .controller-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.8rem 1.5rem;
+            background-color: var(--container-bg, #fff);
+            border-bottom: 1px solid var(--input-border, #e0e0e0);
+            flex-shrink: 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .controller-header h1 { margin: 0; font-size: 1.25rem; }
+        .session-management { display: flex; gap: 1.5rem; align-items: center; }
+        .controls-group { display: flex; gap: 0.75rem; align-items: center; }
+
+        .controller-main-content {
+            display: flex;
+            flex-grow: 1;
+            gap: 1.5rem;
+            padding: 1.5rem;
+            overflow: hidden; /* Evita scroll na página inteira */
+        }
+        .form-column { flex: 1 1 40%; min-width: 400px; display: flex; flex-direction: column; }
+        .list-column { flex: 1 1 60%; min-width: 450px; display: flex; flex-direction: column; }
+
+        .question-form, .question-list {
+            padding: 1.5rem;
+            border-radius: 8px;
+            background-color: var(--container-bg, #fff);
+            border: 1px solid var(--input-border, #e0e0e0);
+        }
+        .question-list { flex-grow: 1; overflow-y: auto; }
+
+        /* Estilos de Tema (provisório para demonstração) */
+        #audience-counter {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 600;
+            color: var(--text-color);
+            opacity: 0.8;
+            cursor: default;
+        }
+        #toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .toast {
+            background-color: #2ecc71;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            opacity: 0;
+            transform: translateX(100%);
+            transition: all 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+        .question-item { position: relative; padding-left: 35px; }
+        .drag-handle {
+            position: absolute;
+            left: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: grab;
+            font-size: 1.5rem;
+            color: #bdc3c7;
+        }
+        .drag-handle:active { cursor: grabbing; }
+
+        .question-item-controls .icon-button { font-size: 1.2rem; padding: 0.4rem 0.6rem; background-color: #7f8c8d; }
+        .question-item-controls .icon-button .btn-text { display: none; } /* Oculta texto em telas maiores */
+        .question-item-controls .icon-button.danger { background-color: #c0392b; }
+
+        .list-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .list-header-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .list-header h2 { margin: 0; }
+        button.secondary-button {
+            background-color: #7f8c8d;
+            color: white;
+            padding: 0.5rem 1rem;
+            font-size: 0.9rem;
+        }
+
+        /* --- Estilos do Formulário --- */
+        .question-form {
+            display: flex;
+            flex-direction: column;
+        }
+        .question-form input.invalid,
+        .question-form select.invalid {
+            border-color: #e74c3c;
+            box-shadow: 0 0 0 2px rgba(231, 76, 60, 0.2);
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .question-form h2 {
+            margin-top: 0;
+            margin-bottom: 1.5rem;
+            font-size: 1.5rem;
+        }
+
+        .question-form > label,
+        .type-config > label,
+        #timer-options > label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .question-form input[type="text"],
+        .question-form input[type="number"],
+        .question-form select {
+            width: 100%;
+            padding: 0.75rem;
+            font-size: 1rem;
+            border-radius: 6px;
+            box-sizing: border-box;
+            margin-bottom: 1.25rem;
+        }
+
+        .question-form button#create-question-btn {
+            width: 100%;
+            padding: 0.85rem;
+            font-size: 1.1rem;
+            font-weight: bold;
+            margin-top: 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .timer-config { margin-top: 0.5rem; margin-bottom: 1.25rem; padding: 1rem; background-color: var(--background-color-alt, #f7f7f7); border-radius: 6px; border: 1px solid var(--input-border, #e0e0e0); }
+        .timer-toggle, .timer-audience-toggle { display: flex; align-items: center; gap: 0.5rem; font-weight: normal; cursor: pointer; margin-bottom: 0; }
+        .timer-audience-toggle { margin-top: 0.5rem; }
+        #timer-options { margin-top: 1rem; }
+        #timer-options input { margin-bottom: 0.5rem; }
+
+        body.theme-dark {
+            --background-color: #2c3e50;
+            --text-color: #ecf0f1;
+            --primary-color: #3498db;
+            --secondary-color: #2980b9;
+            --container-bg: #34495e;
+            --input-bg: #2c3e50;
+            --input-border: #95a5a6;
+            --button-text-color: #ffffff;
+            --background-color-alt: #34495e;
+        }
+        body.theme-corporate {
+            --background-color: #f4f7f9;
+            --text-color: #2c3e50;
+            --primary-color: #005a9e;
+            --secondary-color: #004170;
+            --container-bg: #ffffff;
+            --input-bg: #ffffff;
+            --input-border: #bdc3c7;
+            --button-text-color: #ffffff;
+            --background-color-alt: #e9edf0;
+        }
+        .theme-dark .controller-header, .theme-corporate .controller-header { background-color: var(--background-color-alt); }
+        .theme-dark .question-form, .theme-corporate .question-form, .theme-dark .question-list, .theme-corporate .question-list { background-color: var(--container-bg); border-color: var(--input-border); }
+        .theme-dark h1, .theme-corporate h1, .theme-dark h2, .theme-corporate h2, .theme-dark label, .theme-corporate label { color: var(--text-color); }
+        .theme-dark button, .theme-corporate button { background-color: var(--primary-color); color: var(--button-text-color); border: none; }
+        .theme-dark button:hover, .theme-corporate button:hover { background-color: var(--secondary-color); }
+        .theme-dark button.danger, .theme-corporate button.danger { background-color: #e74c3c; }
+        .theme-dark input, .theme-corporate input, .theme-dark select, .theme-corporate select { background-color: var(--input-bg); color: var(--text-color); border: 1px solid var(--input-border); }
+        .theme-dark button.secondary-button {
+            background-color: #95a5a6;
+        }
+        .theme-corporate button.secondary-button {
+            background-color: #5a6772;
+        }
+        .theme-dark input::placeholder, .theme-corporate input::placeholder { color: var(--text-color); opacity: 0.7; }
+    </style>
 </head>
 <body class="controller-page">
-    <h1>Painel de Controle - Sessão <span id="session-code"></span></h1>
-    <div>
-        <button id="open-presenter-btn">Abrir Apresentação</button>
-        <button id="end-session-btn">Encerrar Sessão</button>
-    </div>
-    
-    <div class="question-form">
-        <h2>Criar Nova Pergunta</h2>
-        <input type="text" id="question-text" placeholder="Texto da pergunta">
-
-        <label for="question-type">Tipo de Resposta:</label>
-        <select id="question-type">
-            <option value="options" selected>Opções (múltipla escolha)</option>
-            <option value="yes_no">Sim / Não</option>
-            <option value="short_text">Texto Curto</option>
-            <option value="long_text">Texto Longo</option>
-            <option value="number">Número (qualquer)</option>
-            <option value="integer">Número (inteiro)</option>
-        </select>
-
-        <div id="options-config" class="type-config active">
-            <input type="text" id="question-options" placeholder="Opções separadas por vírgula (ex: Opção 1,Opção 2)">
-        </div>
-        <div id="text-config" class="type-config">
-            <input type="number" id="char-limit" placeholder="Limite de caracteres (ex: 50)">
-        </div>
-
-        <div class="timer-config">
-            <label>
-                <input type="checkbox" id="timer-enabled"> Habilitar Cronômetro
-            </label>
-            <div id="timer-options">
-                <input type="number" id="timer-duration" placeholder="Duração em minutos (ex: 1)">
-                <label>
-                    <input type="checkbox" id="timer-show-audience"> Exibir para a audiência
-                </label>
+    <header class="controller-header">
+        <h1>Sessão <span id="session-code"></span></h1>
+        <div class="session-management">
+            <div class="controls-group">
+                <span id="audience-counter" title="Participantes na sessão"></span>
+                <label for="session-theme-switcher">Tema:</label>
+                <select id="session-theme-switcher">
+                    <option value="light">Claro</option>
+                    <option value="dark">Escuro</option>
+                    <option value="corporate">Corporativo</option>
+                </select>
+            </div>
+            <div class="controls-group">
+                <button id="open-presenter-btn">Abrir Apresentação</button>
+                <button id="end-session-btn" class="danger">Encerrar Sessão</button>
             </div>
         </div>
+    </header>
 
-        <input type="text" id="question-image" placeholder="URL da imagem (opcional)">
-        <button id="create-question-btn">Criar Pergunta</button>
-    </div>
+    <main class="controller-main-content">
+        <div class="form-column">
+            <div class="question-form">
+                <h2>Criar Nova Pergunta</h2>
 
-    <div class="question-list">
-        <h2>Perguntas Criadas</h2>
-        <div id="questions-container">
-            <p>Nenhuma pergunta criada ainda.</p>
+                <label for="question-text">Texto da Pergunta</label>
+                <input type="text" id="question-text" placeholder="Ex: Qual sua cor favorita?">
+
+                <label for="question-image">URL da Imagem (Opcional)</label>
+                <input type="text" id="question-image" placeholder="https://exemplo.com/imagem.png">
+
+                <label for="question-type">Tipo de Resposta</label>
+                <select id="question-type">
+                    <option value="options" selected>Opções (múltipla escolha)</option>
+                    <option value="yes_no">Sim / Não</option>
+                    <option value="short_text">Texto Curto</option>
+                    <option value="long_text">Texto Longo</option>
+                    <option value="number">Número</option>
+                    <option value="integer">Número Inteiro</option>
+                </select>
+
+                <div id="options-config" class="type-config active">
+                    <label for="question-options">Opções da Pergunta</label>
+                    <input type="text" id="question-options" placeholder="Separadas por vírgula (ex: Opção 1, Opção 2)">
+                </div>
+                <div id="text-config" class="type-config">
+                    <label for="char-limit">Limite de Caracteres</label>
+                    <input type="number" id="char-limit" placeholder="Ex: 50">
+                </div>
+
+                <div class="timer-config">
+                    <label class="timer-toggle">
+                        <input type="checkbox" id="timer-enabled">Habilitar Cronômetro
+                    </label>
+                    <div id="timer-options">
+                        <label for="timer-duration">Duração (minutos)</label>
+                        <input type="number" id="timer-duration" placeholder="Ex: 1">
+                        <label class="timer-audience-toggle">
+                            <input type="checkbox" id="timer-show-audience">Exibir para a audiência
+                        </label>
+                    </div>
+                </div>
+
+                <button id="create-question-btn">Criar Pergunta</button>
+                <button id="cancel-edit-btn" class="secondary-button" style="display: none; margin-top: 10px;">Cancelar Edição</button>
+            </div>
         </div>
-    </div>
+        <div class="list-column">
+            <div class="question-list">
+                <div class="list-header">
+                    <h2>Perguntas Criadas</h2>
+                    <div class="list-header-buttons">
+                        <button id="load-questions-btn" class="secondary-button">Carregar Perguntas</button>
+                        <button id="save-questions-btn" class="secondary-button">Salvar Perguntas</button>
+                    </div>
+                </div>
+                <div id="questions-container">
+                    <p>Nenhuma pergunta criada ainda.</p>
+                </div>
+            </div>
+        </div>
+    </main>
 
+    <div id="toast-container"></div>
+
+    <input type="file" id="load-questions-input" accept=".json" style="display: none;">
+
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="/scripts/cronometro.js"></script>
     <script src="/scripts/controller.js"></script>

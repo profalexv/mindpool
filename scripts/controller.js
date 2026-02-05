@@ -14,10 +14,26 @@ const socket = io(getBackendUrl(), {
     reconnectionAttempts: 5
 });
 let sessionDeadline = null;
+let currentQuestions = []; // Armazena a lista de perguntas atual
+
+/**
+ * Aplica um tema visual ao body, trocando a classe de tema.
+ * @param {string} theme - O nome do tema (ex: 'light', 'dark', 'corporate').
+ */
+function applyTheme(theme = 'light') {
+    console.log(`Aplicando tema de controller: ${theme}`);
+    const body = document.body;
+    // Remove temas antigos para garantir que apenas um esteja ativo
+    body.classList.remove('theme-light', 'theme-dark', 'theme-corporate');
+    body.classList.add(`theme-${theme}`);
+}
 
 // --- 2. MÓDULO DE UI ---
 // Gerencia todas as interações com o DOM e os event listeners.
 const ui = {
+    editingQuestionId: null, // To track which question is being edited
+    activeQuestionId: null, // To track which question is currently active
+    sortableInstance: null,
     elements: {
         sessionCodeDisplay: document.getElementById('session-code'),
         questionTypeSelect: document.getElementById('question-type'),
@@ -26,10 +42,17 @@ const ui = {
         timerEnabledCheckbox: document.getElementById('timer-enabled'),
         timerOptionsDiv: document.getElementById('timer-options'),
         createBtn: document.getElementById('create-question-btn'),
+        cancelEditBtn: document.getElementById('cancel-edit-btn'),
         openPresenterBtn: document.getElementById('open-presenter-btn'),
         endSessionBtn: document.getElementById('end-session-btn'),
         questionsContainer: document.getElementById('questions-container'),
+        saveQuestionsBtn: document.getElementById('save-questions-btn'),
+        loadQuestionsBtn: document.getElementById('load-questions-btn'),
+        loadQuestionsInput: document.getElementById('load-questions-input'),
         sessionThemeSwitcher: document.getElementById('session-theme-switcher'),
+        audienceCounter: document.getElementById('audience-counter'),
+        toastContainer: document.getElementById('toast-container'),
+        formColumn: document.querySelector('.form-column'),
         // Inputs do formulário
         questionTextInput: document.getElementById('question-text'),
         imageUrlInput: document.getElementById('question-image'),
@@ -50,12 +73,25 @@ const ui = {
         this.elements.timerEnabledCheckbox?.addEventListener('change', (e) => this.toggleTimerOptions(e.target.checked));
         this.elements.questionTypeSelect?.addEventListener('change', (e) => this.toggleQuestionTypeOptions(e.target.value));
 
+        // Add listeners to remove validation error on input
+        this.elements.questionTextInput.addEventListener('input', () => this.elements.questionTextInput.classList.remove('invalid'));
+        this.elements.optionsTextInput.addEventListener('input', () => this.elements.optionsTextInput.classList.remove('invalid'));
+
         this.elements.createBtn?.addEventListener('click', () => {
             const questionData = this.getQuestionData();
             if (questionData) {
-                socketHandler.createQuestion(questionData);
-                this.clearForm();
+                if (this.editingQuestionId !== null) {
+                    socketHandler.editQuestion(this.editingQuestionId, questionData);
+                } else {
+                    socketHandler.createQuestion(questionData);
+                }
+                this.exitEditMode();
             }
+        });
+
+        this.elements.cancelEditBtn?.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.exitEditMode();
         });
 
         if (this.elements.openPresenterBtn) {
@@ -81,31 +117,83 @@ const ui = {
             const newTheme = e.target.value;
             socketHandler.changeTheme(newTheme);
         });
+
+        this.elements.saveQuestionsBtn?.addEventListener('click', () => {
+            this.saveQuestionsToFile();
+        });
+
+        this.elements.loadQuestionsBtn?.addEventListener('click', () => {
+            this.elements.loadQuestionsInput.click();
+        });
+
+        this.elements.loadQuestionsInput?.addEventListener('change', (e) => {
+            this.loadQuestionsFromFile(e.target.files[0], socketHandler);
+        });
+
+        // Inicializa o Drag-and-Drop na lista de perguntas
+        this.sortableInstance = new Sortable(this.elements.questionsContainer, {
+            animation: 150,
+            handle: '.drag-handle', // Classe do elemento que aciona o arrastar
+            onEnd: (evt) => {
+                // Reordena o array local
+                const [movedItem] = currentQuestions.splice(evt.oldIndex, 1);
+                currentQuestions.splice(evt.newIndex, 0, movedItem);
+
+                const activeQuestionIndex = currentQuestions.findIndex(q => q && q.id === ui.activeQuestionId);
+
+                // Se uma pergunta concluída for movida para depois da ativa (ou se não houver ativa),
+                // ela é reativada, limpando seus resultados.
+                if (movedItem.isConcluded && (activeQuestionIndex === -1 || evt.newIndex > activeQuestionIndex)) {
+                    movedItem.isConcluded = false;
+                    movedItem.results = {};
+                }
+
+                socketHandler.reorderQuestions(currentQuestions);
+            },
+            // Previne o movimento da pergunta ativa
+            onMove: (evt) => !evt.dragged.classList.contains('active'),
+        });
     },
 
     getQuestionData() {
-        const questionText = this.elements.questionTextInput.value;
+        // Clear previous validation errors
+        this.elements.questionTextInput.classList.remove('invalid');
+        this.elements.optionsTextInput.classList.remove('invalid');
+
+        let isValid = true;
+
+        const questionText = this.elements.questionTextInput.value.trim();
         if (!questionText) {
-            alert('O texto da pergunta é obrigatório.');
+            this.elements.questionTextInput.classList.add('invalid');
+            this.elements.questionTextInput.focus();
+            isValid = false;
+        }
+
+        const questionType = this.elements.questionTypeSelect.value;
+        if (questionType === 'options') {
+            const optionsText = this.elements.optionsTextInput.value.trim();
+            if (!optionsText) {
+                this.elements.optionsTextInput.classList.add('invalid');
+                if (isValid) this.elements.optionsTextInput.focus(); // Focus only if it's the first error
+                isValid = false;
+            }
+        }
+        
+        if (!isValid) {
             return null;
         }
 
         const question = {
             text: questionText,
             imageUrl: this.elements.imageUrlInput.value || null,
-            questionType: this.elements.questionTypeSelect.value,
+            questionType: questionType,
             options: null,
             charLimit: null,
             timer: null
         };
 
         if (question.questionType === 'options') {
-            const optionsText = this.elements.optionsTextInput.value;
-            if (!optionsText) {
-                alert('As opções são obrigatórias para este tipo de pergunta.');
-                return null;
-            }
-            question.options = optionsText.split(',').map((opt, index) => ({ id: `opt${index}`, text: opt.trim() }));
+            question.options = this.elements.optionsTextInput.value.split(',').map((opt, index) => ({ id: `opt${index}`, text: opt.trim() }));
         } else if (['short_text', 'long_text'].includes(question.questionType)) {
             question.charLimit = parseInt(this.elements.charLimitInput.value) || (question.questionType === 'short_text' ? 50 : 280);
         }
@@ -133,6 +221,13 @@ const ui = {
         this.toggleTimerOptions(false);
     },
 
+    exitEditMode() {
+        this.clearForm();
+        this.editingQuestionId = null;
+        this.elements.createBtn.innerText = 'Criar Pergunta';
+        this.elements.cancelEditBtn.style.display = 'none';
+    },
+
     toggleTimerOptions: (isEnabled) => ui.elements.timerOptionsDiv && (ui.elements.timerOptionsDiv.style.display = isEnabled ? 'block' : 'none'),
 
     toggleQuestionTypeOptions(type) {
@@ -141,6 +236,7 @@ const ui = {
     },
 
     renderQuestions(questions, socketHandler) {
+        currentQuestions = questions; // Atualiza a lista de perguntas local
         const container = this.elements.questionsContainer;
         if (!container) return;
         container.innerHTML = '';
@@ -151,50 +247,273 @@ const ui = {
             return;
         }
 
-        validQuestions.forEach(q => {
+        validQuestions.forEach((q, index) => {
+            const isConcluded = q.isConcluded;
+            const isActive = q.id === ui.activeQuestionId;
+
             let isWarning = false;
             if (sessionDeadline && q.timer && q.timer.duration) {
                 if ((Date.now() + q.timer.duration * 1000) > sessionDeadline) isWarning = true;
             }
-
+            
             const div = document.createElement('div');
             div.className = `question-item ${isWarning ? 'warning' : ''}`;
             div.id = `question-item-${q.id}`;
-            div.innerHTML = `<p><strong>${q.text}</strong></p><div id="question-controls-${q.id}"></div>`;
+            div.innerHTML = `
+                <span class="drag-handle" title="Arraste para reordenar">↕️</span>
+                <p><strong>${q.text}</strong></p>
+                <div class="question-item-controls" id="question-controls-${q.id}"></div>
+            `;
             container.appendChild(div);
 
             const controlsDiv = div.querySelector(`#question-controls-${q.id}`);
+
+            // Botão de Editar
+            const editBtn = document.createElement('button');
+            editBtn.innerHTML = '✏️ <span class="btn-text">Editar</span>';
+            editBtn.className = 'icon-button edit-btn';
+            editBtn.title = 'Editar Pergunta';
+            editBtn.onclick = () => this.enterEditMode(q);
+            if (isConcluded || isActive) {
+                editBtn.disabled = true;
+                editBtn.title = 'Não é possível editar uma pergunta ativa ou já encerrada.';
+            }
+
+            // Botão de Duplicar
+            const duplicateBtn = document.createElement('button');
+            duplicateBtn.innerHTML = '📋 <span class="btn-text">Duplicar</span>';
+            duplicateBtn.className = 'icon-button duplicate-btn';
+            duplicateBtn.title = 'Duplicar Pergunta';
+            duplicateBtn.onclick = () => this.enterDuplicateMode(q);
+
+            // Botão de Deletar
+            const deleteBtn = document.createElement('button');
+            deleteBtn.innerHTML = '🗑️ <span class="btn-text">Deletar</span>';
+            deleteBtn.className = 'icon-button danger delete-btn';
+            deleteBtn.title = 'Deletar Pergunta';
+            deleteBtn.onclick = () => {
+                if (confirm(`Tem certeza que deseja deletar a pergunta "${q.text}"?`)) {
+                    socketHandler.deleteQuestion(q.id);
+                }
+            };
+
+            // Botão de Iniciar
             const startBtn = document.createElement('button');
-            startBtn.innerText = 'Iniciar Pergunta';
+            startBtn.innerText = isConcluded ? 'Re-abrir Votação' : 'Iniciar Pergunta';
+            startBtn.className = 'start-btn';
             startBtn.onclick = () => socketHandler.startQuestion(q.id);
-            controlsDiv.appendChild(startBtn);
-        });
-    },
 
-    setActiveQuestion(questionId, socketHandler) {
-        document.querySelectorAll('.question-item [id^="question-controls-"]').forEach(controls => {
-            const id = controls.id.split('-')[2];
-            controls.innerHTML = '';
-            const startBtn = document.createElement('button');
-            startBtn.innerText = 'Iniciar Pergunta';
-            startBtn.onclick = () => socketHandler.startQuestion(id);
-            controls.appendChild(startBtn);
-        });
-
-        const activeControls = document.getElementById(`question-controls-${questionId}`);
-        if (activeControls) {
-            activeControls.innerHTML = '';
+            // Botão de Parar
             const stopBtn = document.createElement('button');
             stopBtn.innerText = 'Parar Respostas';
+            stopBtn.className = 'stop-btn';
             stopBtn.style.backgroundColor = '#f0ad4e';
-            stopBtn.onclick = () => socketHandler.stopVoting(questionId);
-            activeControls.appendChild(stopBtn);
-        }
+            stopBtn.style.display = 'none'; // Oculto por padrão
+            stopBtn.onclick = () => socketHandler.stopVoting(q.id);
+
+            // Botão para Exibir Resultados (se concluída)
+            let showResultsBtn = null;
+            if (isConcluded) {
+                showResultsBtn = document.createElement('button');
+                showResultsBtn.innerText = 'Exibir Resultados';
+                showResultsBtn.className = 'show-results-btn';
+                showResultsBtn.style.backgroundColor = '#16a085';
+                showResultsBtn.onclick = () => socketHandler.showResults(q.id);
+            }
+
+            controlsDiv.appendChild(editBtn);
+            controlsDiv.appendChild(duplicateBtn);
+            controlsDiv.appendChild(deleteBtn);
+            if (showResultsBtn) {
+                controlsDiv.appendChild(showResultsBtn);
+            }
+            controlsDiv.appendChild(startBtn);
+            controlsDiv.appendChild(stopBtn);
+        });
     },
 
-    setVotingEnded(questionId) {
-        const controls = document.getElementById(`question-controls-${questionId}`);
-        if (controls) controls.innerHTML = `<p style="color: green;">Votação encerrada.</p>`;
+    setActiveQuestion(question, socketHandler) {
+        const questionId = question.id;
+        this.activeQuestionId = questionId; // Armazena o ID da pergunta ativa
+        document.querySelectorAll('.question-item').forEach(item => {
+            const isThisActive = item.id === `question-item-${questionId}`;
+            item.classList.toggle('active', isThisActive);
+
+            const startBtn = item.querySelector('.start-btn');
+            const stopBtn = item.querySelector('.stop-btn');
+            const deleteBtn = item.querySelector('.delete-btn');
+            const showResultsBtn = item.querySelector('.show-results-btn');
+
+            if (isThisActive) {
+                // This is the active question: hide most action buttons
+                if (startBtn) startBtn.style.display = 'none';
+                if (deleteBtn) deleteBtn.style.display = 'none';
+                if (showResultsBtn) showResultsBtn.style.display = 'none';
+                
+                // Only show the 'Stop' button if voting is actually open
+                if (stopBtn) {
+                    stopBtn.style.display = question.acceptingAnswers ? 'inline-block' : 'none';
+                }
+            } else {
+                // This is not an active question: restore default visibility
+                if (startBtn) startBtn.style.display = 'inline-block';
+                if (deleteBtn) deleteBtn.style.display = 'inline-block';
+                if (stopBtn) stopBtn.style.display = 'none';
+            }
+        });
+    },
+
+    saveQuestionsToFile() {
+        const validQuestions = currentQuestions.filter(q => q !== null);
+        if (validQuestions.length === 0) {
+            alert('Não há perguntas para salvar.');
+            return;
+        }
+
+        if (!confirm("Atenção: O arquivo salvo incluirá as senhas de controller e presenter em texto claro, se disponíveis. Deseja continuar?")) {
+            return;
+        }
+
+        const questionsToSave = validQuestions
+            .filter(q => q !== null)
+            .map(({ text, imageUrl, questionType, options, charLimit, timer, results, isConcluded, ...rest }) => ({
+                text,
+                imageUrl: imageUrl || undefined,
+                questionType,
+                options: (questionType === 'options' && options) ? options.map(opt => opt.text) : undefined,
+                charLimit: charLimit || undefined,
+                timer: timer || undefined,
+                // Omitindo explicitamente 'results' e 'isConcluded' do arquivo salvo
+            }));
+
+        const sessionSettings = {
+            theme: this.elements.sessionThemeSwitcher.value,
+            controllerPassword: sessionStorage.getItem('mindpool_session_pass') || '',
+            presenterPassword: sessionStorage.getItem('mindpool_presenter_pass') || ''
+        };
+
+        const exportData = {
+            sessionSettings,
+            questions: questionsToSave
+        };
+
+        const sessionCode = this.elements.sessionCodeDisplay.innerText;
+        const filename = `mindpool-session-${sessionCode}-${new Date().toISOString().slice(0, 10)}.json`;
+        const dataStr = JSON.stringify(exportData, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+
+        const downloadLink = document.createElement('a');
+        downloadLink.href = URL.createObjectURL(dataBlob);
+        downloadLink.download = filename;
+        downloadLink.click();
+        URL.revokeObjectURL(downloadLink.href); // Libera a memória
+    },
+
+    loadQuestionsFromFile(file, socketHandler) {
+        if (!file) return;
+
+        const fileReader = new FileReader();
+        fileReader.onload = (e) => {
+            try {
+                const content = JSON.parse(e.target.result);
+                // Suporta o novo formato {sessionSettings, questions} e o formato antigo [questions]
+                const questions = content.questions || content;
+
+                if (!Array.isArray(questions)) {
+                    throw new Error('Formato de arquivo inválido: o arquivo não contém um array de perguntas.');
+                }
+
+                if (confirm(`Deseja adicionar ${questions.length} pergunta(s) a esta sessão?`)) {
+                    questions.forEach(q => {
+                        // Converte o formato das opções de volta para o que o servidor espera
+                        let formattedQuestion = { ...q };
+                        if (formattedQuestion.questionType === 'options' && formattedQuestion.options && Array.isArray(formattedQuestion.options)) {
+                            formattedQuestion.options = formattedQuestion.options.map((optText, index) => ({ id: `opt${index}`, text: String(optText).trim() }));
+                        }
+                        socketHandler.createQuestion(formattedQuestion);
+                    });
+                }
+            } catch (error) {
+                alert('Erro ao carregar o arquivo: ' + error.message);
+            } finally {
+                // Limpa o valor do input para permitir carregar o mesmo arquivo novamente
+                this.elements.loadQuestionsInput.value = '';
+            }
+        };
+        fileReader.onerror = () => {
+            alert('Não foi possível ler o arquivo.');
+            this.elements.loadQuestionsInput.value = '';
+        };
+        fileReader.readAsText(file);
+    },
+
+    enterDuplicateMode(question) {
+        if (!question) return;
+        
+        this.exitEditMode(); // Limpa estado anterior, garantindo editingQuestionId = null
+
+        // Preenche o formulário com os dados da pergunta original
+        this.elements.questionTextInput.value = `${question.text} (Cópia)`;
+        this.elements.imageUrlInput.value = question.imageUrl || '';
+        this.elements.questionTypeSelect.value = question.questionType;
+        this.toggleQuestionTypeOptions(question.questionType);
+
+        if (question.questionType === 'options' && question.options) {
+            this.elements.optionsTextInput.value = question.options.map(o => o.text).join(', ');
+        } else if (['short_text', 'long_text'].includes(question.questionType)) {
+            this.elements.charLimitInput.value = question.charLimit || '';
+        }
+
+        if (question.timer) {
+            this.elements.timerEnabledCheckbox.checked = true;
+            this.toggleTimerOptions(true);
+            this.elements.timerDurationInput.value = question.timer.duration / 60;
+            this.elements.timerShowAudienceCheckbox.checked = question.timer.showToAudience;
+        } else {
+            this.elements.timerEnabledCheckbox.checked = false;
+            this.toggleTimerOptions(false);
+        }
+
+        // Atualiza a UI para o modo de duplicação
+        this.elements.createBtn.innerText = 'Salvar Cópia';
+        this.elements.cancelEditBtn.style.display = 'block';
+        this.elements.formColumn.scrollIntoView({ behavior: 'smooth' });
+        this.elements.questionTextInput.focus();
+    },
+
+    enterEditMode(question) {
+        if (!question) return;
+        
+        this.exitEditMode(); // Limpa estado anterior
+        this.editingQuestionId = question.id;
+
+        // Preenche o formulário
+        this.elements.questionTextInput.value = question.text;
+        this.elements.imageUrlInput.value = question.imageUrl || '';
+        this.elements.questionTypeSelect.value = question.questionType;
+        this.toggleQuestionTypeOptions(question.questionType);
+
+        if (question.questionType === 'options' && question.options) {
+            this.elements.optionsTextInput.value = question.options.map(o => o.text).join(', ');
+        } else if (['short_text', 'long_text'].includes(question.questionType)) {
+            this.elements.charLimitInput.value = question.charLimit || '';
+        }
+
+        if (question.timer) {
+            this.elements.timerEnabledCheckbox.checked = true;
+            this.toggleTimerOptions(true);
+            this.elements.timerDurationInput.value = question.timer.duration / 60;
+            this.elements.timerShowAudienceCheckbox.checked = question.timer.showToAudience;
+        } else {
+            this.elements.timerEnabledCheckbox.checked = false;
+            this.toggleTimerOptions(false);
+        }
+
+        // Atualiza a UI
+        this.elements.createBtn.innerText = 'Salvar Alterações';
+        this.elements.cancelEditBtn.style.display = 'block';
+        this.elements.formColumn.scrollIntoView({ behavior: 'smooth' });
+        this.elements.questionTextInput.focus();
     },
 
     handleSessionEnded: (message) => { alert(message); window.location.href = '/'; },
@@ -206,10 +525,42 @@ const ui = {
             return;
         }
         sessionDeadline = response.deadline;
+        if (response.audienceCount !== undefined) {
+            this.updateAudienceCount(response.audienceCount);
+        }
+        if (response.activeQuestion !== null) {
+            // FIX: Don't call setActiveQuestion with an ID, which causes an error.
+            // Just store the ID. The UI will be correctly updated by the 
+            // 'newQuestion' event that follows shortly after joining.
+            this.activeQuestionId = response.activeQuestion;
+        }
         if (sessionDeadline) this.showDeadlineWarning();
     },
 
+    updateAudienceCount(count, joined = null) {
+        if (this.elements.audienceCounter) {
+            this.elements.audienceCounter.innerHTML = `👥 ${count}`;
+        }
+        if (joined !== null) { // Apenas mostra toast em atualizações, não na carga inicial
+            const message = joined ? 'Novo participante entrou!' : 'Um participante saiu.';
+            this.showToast(message);
+        }
+    },
+
+    showToast(message) {
+        if (!this.elements.toastContainer) return;
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.innerText = message;
+        this.elements.toastContainer.appendChild(toast);
+        setTimeout(() => toast.classList.add('show'), 10);
+        setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 500); }, 3000);
+    },
+
     handleThemeChanged(theme) {
+        // Aplica o tema visualmente na página do controller
+        applyTheme(theme);
+
         // Atualiza o seletor para refletir o estado atual (caso outro controller mude)
         if (this.elements.sessionThemeSwitcher) {
             this.elements.sessionThemeSwitcher.value = theme;
@@ -242,10 +593,10 @@ const ui = {
 const socketHandler = {
     init() {
         socket.on('questionsUpdated', (questions) => ui.renderQuestions(questions, this));
-        socket.on('newQuestion', (question) => ui.setActiveQuestion(question.id, this));
-        socket.on('votingEnded', ({ questionId }) => ui.setVotingEnded(questionId));
+        socket.on('newQuestion', (question) => ui.setActiveQuestion(question, this));
         socket.on('sessionEnded', ({ message }) => ui.handleSessionEnded(message));
         socket.on('themeChanged', ({ theme }) => ui.handleThemeChanged(theme));
+        socket.on('audienceCountUpdated', ({ count, joined }) => ui.updateAudienceCount(count, joined));
 
         socket.on('connect', () => {
             console.log('✅ Conectado ao servidor. Autenticando controller...');
@@ -294,6 +645,22 @@ const socketHandler = {
     changeTheme: (theme) => {
         const sessionCode = new URLSearchParams(window.location.search).get('session');
         socket.emit('changeTheme', { sessionCode, theme });
+    },
+    editQuestion: (questionId, questionData) => {
+        const sessionCode = new URLSearchParams(window.location.search).get('session');
+        socket.emit('editQuestion', { sessionCode, questionId, updatedQuestion: questionData });
+    },
+    deleteQuestion: (questionId) => {
+        const sessionCode = new URLSearchParams(window.location.search).get('session');
+        socket.emit('deleteQuestion', { sessionCode, questionId });
+    },
+    reorderQuestions: (newOrder) => {
+        const sessionCode = new URLSearchParams(window.location.search).get('session');
+        socket.emit('reorderQuestions', { sessionCode, newQuestionOrder: newOrder });
+    },
+    showResults: (questionId) => {
+        const sessionCode = new URLSearchParams(window.location.search).get('session');
+        socket.emit('showResults', { sessionCode, questionId });
     },
 };
 

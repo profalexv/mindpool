@@ -211,7 +211,7 @@ io.on('connection', (socket) => {
     registerQuestionHandlers(io, socket, sessions, logger);
 
     // 1. CRIAR UMA NOVA SESSÃO
-    socket.on('createSession', async ({ controllerPassword, presenterPassword, deadline, theme }, callback) => {
+    socket.on('createSession', async ({ controllerPassword, presenterPassword, deadline, theme, questions: importedQuestions }, callback) => {
         try {
             // Rate limiting
             if (!checkRateLimit(clientIp)) {
@@ -263,6 +263,29 @@ io.on('connection', (socket) => {
                 isHashed: ENABLE_PASSWORD_HASHING && bcrypt ? true : false,
                 theme: theme || 'light' // Adiciona o tema à sessão
             };
+
+            // Adiciona perguntas importadas, se houver
+            if (importedQuestions && Array.isArray(importedQuestions)) {
+                importedQuestions.forEach(q => {
+                    let formattedOptions;
+                    if (q.questionType === 'options' && q.options && Array.isArray(q.options)) {
+                        // Converte array de strings para array de objetos {id, text}
+                        formattedOptions = q.options.map((optText, index) => ({ id: `opt${index}`, text: String(optText).trim() }));
+                    }
+
+                    sessions[sessionCode].questions.push({
+                        id: sessions[sessionCode].questions.length,
+                        text: q.text,
+                        imageUrl: q.imageUrl,
+                        questionType: q.questionType,
+                        options: formattedOptions,
+                        charLimit: q.charLimit,
+                        timer: q.timer,
+                        results: {},
+                        createdAt: Date.now()
+                    });
+                });
+            }
 
             resetRateLimitAttempts(clientIp);
             logAction(sessionCode, 'CRIADA');
@@ -329,7 +352,7 @@ io.on('connection', (socket) => {
             }
 
             logAction(sessionCode, `${role.toUpperCase()} conectado`);
-            callback({ success: true, deadline: session.deadline, theme: session.theme });
+            callback({ success: true, deadline: session.deadline, theme: session.theme, audienceCount: session.audienceCount, activeQuestion: session.activeQuestion });
 
             // Enviar estado atual
             socket.emit('questionsUpdated', session.questions);
@@ -350,13 +373,14 @@ io.on('connection', (socket) => {
             session.theme = theme;
             logAction(sessionCode, `TEMA alterado para '${theme}'`);
             // Notifica todos na sala (presenters, outros controllers) sobre a mudança
-            io.to(sessionCode).emit('themeChanged', { theme });
+            io.to(sessionCode).emit('themeChanged', { theme }); // This already notifies audience
         }
     });
 
     // 3. ENTRAR EM UMA SESSÃO (PLATEIA)
     socket.on('joinAudienceSession', ({ sessionCode }) => {
-        if (!sessions[sessionCode]) {
+        const session = sessions[sessionCode];
+        if (!session) {
             socket.emit('error', 'Sessão não encontrada.');
             return;
         }
@@ -364,13 +388,55 @@ io.on('connection', (socket) => {
         logger.info(`Socket ${socket.id} (role: audience) JOINED room ${sessionCode}`);
         socket.sessionCode = sessionCode;
         socket.role = 'audience';
-        sessions[sessionCode].audienceCount++;
+        session.audienceCount++;
         
-        logAction(sessionCode, `PLATEIA conectada (total: ${sessions[sessionCode].audienceCount})`);
+        logAction(sessionCode, `PLATEIA conectada (total: ${session.audienceCount})`);
 
-        const session = sessions[sessionCode];
+        // Notifica o controller sobre a mudança na contagem da plateia
+        io.to(sessionCode).emit('audienceCountUpdated', { count: session.audienceCount, joined: true });
+
+        // Envia o tema atual da sessão para o novo membro da plateia
+        socket.emit('themeChanged', { theme: session.theme || 'light' });
+
         if (session.activeQuestion !== null) {
             socket.emit('newQuestion', session.questions[session.activeQuestion]);
+        }
+    });
+
+    // EDITAR PERGUNTA
+    socket.on('editQuestion', ({ sessionCode, questionId, updatedQuestion }) => {
+        const session = sessions[sessionCode];
+        if (session && socket.role === 'controller' && session.questions[questionId] != null) {
+            const questionToUpdate = session.questions[questionId];
+            
+            if (session.activeQuestion === questionId) {
+                logger.warn(`Tentativa de editar pergunta ativa ${questionId} na sessão ${sessionCode}`);
+                return; // Não permite editar pergunta ativa
+            }
+
+            // Atualiza os campos, preservando ID e resultados
+            Object.assign(questionToUpdate, updatedQuestion, { id: questionId, results: questionToUpdate.results });
+            
+            logAction(sessionCode, `PERGUNTA EDITADA (ID: ${questionId})`);
+            io.to(sessionCode).emit('questionsUpdated', session.questions);
+        }
+    });
+
+    // REORDENAR PERGUNTAS
+    socket.on('reorderQuestions', ({ sessionCode, newQuestionOrder }) => {
+        const session = sessions[sessionCode];
+        if (session && socket.role === 'controller') {
+            if (!Array.isArray(newQuestionOrder)) return;
+
+            // O cliente é a fonte da verdade para a nova ordem e estado.
+            // O servidor apenas re-indexa os IDs para consistência.
+            session.questions = newQuestionOrder.filter(q => q !== null).map((q, index) => {
+                if (q) q.id = index;
+                return q;
+            });
+            
+            logAction(sessionCode, `PERGUNTAS REORDENADAS`);
+            io.to(sessionCode).emit('questionsUpdated', session.questions);
         }
     });
 
@@ -451,6 +517,8 @@ io.on('connection', (socket) => {
                 session.presenterSocketIds = session.presenterSocketIds.filter(id => id !== socket.id);
             } else if (socket.role === 'audience') {
                 session.audienceCount = Math.max(0, session.audienceCount - 1);
+                // Notifica o controller sobre a mudança na contagem da plateia
+                io.to(sessionCode).emit('audienceCountUpdated', { count: session.audienceCount, joined: false });
             }
             logAction(sessionCode, `${socket.role.toUpperCase()} desconectado`);
         }

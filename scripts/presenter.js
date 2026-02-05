@@ -12,6 +12,18 @@ const socket = io(getBackendUrl(), {
     reconnectionAttempts: 5
 });
 
+/**
+ * Aplica um tema visual ao body, trocando a classe de tema.
+ * @param {string} theme - O nome do tema (ex: 'light', 'dark', 'corporate').
+ */
+function applyTheme(theme = 'light') {
+    console.log(`Aplicando tema: ${theme}`);
+    const body = document.body;
+    // Remove temas antigos para garantir que apenas um esteja ativo
+    body.classList.remove('theme-light', 'theme-dark', 'theme-corporate');
+    body.classList.add(`theme-${theme}`);
+}
+
 function getSessionPassword() {
     // 1. Tenta obter a senha do sessionStorage da aba atual.
     let password = sessionStorage.getItem('mindpool_session_pass');

@@ -15,6 +15,18 @@ let currentQuestionId = null;
 let currentTimer = null;
 const audienceTimerEl = document.getElementById('audience-timer');
 
+/**
+ * Aplica um tema visual ao body, trocando a classe de tema.
+ * @param {string} theme - O nome do tema (ex: 'light', 'dark', 'corporate').
+ */
+function applyTheme(theme = 'light') {
+    console.log(`Aplicando tema de plateia: ${theme}`);
+    const body = document.body;
+    // Remove temas antigos para garantir que apenas um esteja ativo
+    body.classList.remove('theme-light', 'theme-dark', 'theme-corporate');
+    body.classList.add(`theme-${theme}`);
+}
+
 function joinAudienceSession() {
     const sessionCode = new URLSearchParams(window.location.search).get('session');
     if (sessionCode) {
@@ -105,6 +117,11 @@ socket.on('newQuestion', (question) => {
             currentTimer.start();
         }
     }
+});
+
+socket.on('themeChanged', ({ theme }) => {
+    console.log(`Recebido evento de mudança de tema: ${theme}`);
+    applyTheme(theme);
 });
 
 socket.on('error', (message) => {

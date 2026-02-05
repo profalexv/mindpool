@@ -16,6 +16,7 @@ const socket = io(getBackendUrl(), {
 
 const params = new URLSearchParams(window.location.search);
 const role = params.get('role');
+let questionsToImport = []; // Armazena perguntas carregadas de um arquivo
 
 // ===== SELEÇÃO DE ELEMENTOS DO DOM =====
 const pageTitle = document.getElementById('page-title');
@@ -32,6 +33,8 @@ const joinSessionMainBtn = document.getElementById('join-session-main-btn');
 const backToIndexBtn = document.getElementById('back-to-index-btn');
 
 // Formulário de Nova Sessão
+const loadFromFileBtn = document.getElementById('load-session-from-file-btn');
+const loadSessionInput = document.getElementById('load-session-input');
 const createSessionBtn = document.getElementById('create-session-btn');
 const newControllerPassInput = document.getElementById('new-controller-pass');
 const newPresenterPassInput = document.getElementById('new-presenter-pass');
@@ -70,6 +73,7 @@ function showMainMenu() {
     if (sessionThemeInput) sessionThemeInput.value = 'light';
     joinSessionCodeInput.value = '';
     joinSessionPassInput.value = '';
+    questionsToImport = []; // Limpa perguntas importadas
 }
 
 // ===== VALIDAÇÃO E CONFIGURAÇÃO INICIAL DA UI =====
@@ -128,6 +132,45 @@ backToMenuBtns.forEach(btn => {
     });
 });
 
+loadFromFileBtn?.addEventListener('click', () => {
+    loadSessionInput.click();
+});
+
+loadSessionInput?.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        try {
+            const data = JSON.parse(event.target.result);
+            if (data.sessionSettings) {
+                const { theme, controllerPassword, presenterPassword } = data.sessionSettings;
+                if (theme) sessionThemeInput.value = theme;
+                if (controllerPassword) newControllerPassInput.value = controllerPassword;
+                if (presenterPassword) newPresenterPassInput.value = presenterPassword;
+            }
+            if (data.questions && Array.isArray(data.questions)) {
+                questionsToImport = data.questions;
+                alert(`${questionsToImport.length} pergunta(s) carregada(s) e prontas para serem incluídas na nova sessão.`);
+            } else {
+                questionsToImport = [];
+            }
+        } catch (error) {
+            showError('Erro ao processar o arquivo. Verifique se é um JSON válido.');
+            questionsToImport = [];
+        } finally {
+            // Limpa o input para permitir carregar o mesmo arquivo novamente
+            loadSessionInput.value = '';
+        }
+    };
+    reader.onerror = () => {
+        showError('Não foi possível ler o arquivo.');
+        loadSessionInput.value = '';
+    };
+    reader.readAsText(file);
+});
+
 // Lógica de criação de sessão
 createSessionBtn?.addEventListener('click', () => {
     const controllerPassword = newControllerPassInput.value.trim();
@@ -150,12 +193,14 @@ createSessionBtn?.addEventListener('click', () => {
     createSessionBtn.disabled = true;
     createSessionBtn.innerText = 'Criando...';
 
-    socket.emit('createSession', { controllerPassword, presenterPassword, deadline, theme }, (response) => {
+    const payload = { controllerPassword, presenterPassword, deadline, theme, questions: questionsToImport };
+
+    socket.emit('createSession', payload, (response) => {
         createSessionBtn.disabled = false;
         createSessionBtn.innerText = 'Criar e Entrar';
         
         if (response.success) {
-            // Armazena temporariamente a senha para a próxima página
+            questionsToImport = []; // Limpa após o uso
             sessionStorage.setItem('mindpool_session_code', response.sessionCode);
             sessionStorage.setItem('mindpool_session_pass', controllerPassword);
             sessionStorage.setItem('mindpool_presenter_pass', presenterPassword);

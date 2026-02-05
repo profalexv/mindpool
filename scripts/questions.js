@@ -26,7 +26,7 @@ function registerQuestionHandlers(io, socket, sessions, logger) {
             timer: question.timer,
             results: {},
             createdAt: Date.now(),
-            canEdit: true // Nova propriedade para permitir edição
+            isConcluded: false // Flag para saber se a pergunta já foi encerrada
         });
 
         logAction(sessionCode, `PERGUNTA #${session.questions.length - 1} criada`);
@@ -40,8 +40,8 @@ function registerQuestionHandlers(io, socket, sessions, logger) {
 
         const question = session.questions[questionId];
         
-        if (session.activeQuestion === questionId) {
-            socket.emit('error', 'Não pode editar pergunta ativa');
+        if (session.activeQuestion === questionId || question.isConcluded) {
+            socket.emit('error', 'Não é possível editar uma pergunta ativa ou já encerrada.');
             return;
         }
 
@@ -82,11 +82,22 @@ function registerQuestionHandlers(io, socket, sessions, logger) {
             return;
         }
 
-        session.questions[questionId] = null;
+        // Em vez de setar para null, remove do array
+        session.questions.splice(questionId, 1);
+
+        // Re-indexa as perguntas subsequentes
+        for (let i = questionId; i < session.questions.length; i++) {
+            session.questions[i].id = i;
+        }
+
+        // Se a pergunta ativa era posterior à deletada, atualiza seu ID
+        if (session.activeQuestion !== null && session.activeQuestion > questionId) {
+            session.activeQuestion--;
+        }
+
         logAction(sessionCode, `PERGUNTA #${questionId} deletada`);
         io.to(sessionCode).emit('questionsUpdated', session.questions);
     });
-
     // INICIAR UMA PERGUNTA
     socket.on('startQuestion', ({ sessionCode, questionId }) => {
         const session = sessions[sessionCode];
@@ -95,6 +106,7 @@ function registerQuestionHandlers(io, socket, sessions, logger) {
             const question = session.questions[questionId];
             question.results = {};
             question.acceptingAnswers = true;
+            question.isConcluded = false; // Reseta o estado ao re-iniciar
             question.endTime = null;
             
             if (question.timer && question.timer.duration > 0) {
@@ -120,9 +132,26 @@ function registerQuestionHandlers(io, socket, sessions, logger) {
         if (session && session.questions[questionId]) {
             const question = session.questions[questionId];
             question.acceptingAnswers = false;
+            question.isConcluded = true; // Marca como encerrada
             
             logAction(sessionCode, `PERGUNTA #${questionId} parada`);
             io.to(sessionCode).emit('votingEnded', { questionId });
+            // Envia a atualização para que a UI do controller mude os botões
+            io.to(sessionCode).emit('questionsUpdated', session.questions);
+        }
+    });
+
+    // EXIBIR RESULTADOS DE UMA PERGUNTA JÁ ENCERRADA
+    socket.on('showResults', ({ sessionCode, questionId }) => {
+        const session = sessions[sessionCode];
+        if (session && session.questions[questionId] && session.questions[questionId].isConcluded) {
+            session.activeQuestion = questionId;
+            const question = session.questions[questionId];
+            question.acceptingAnswers = false; // Não aceita novas respostas
+
+            logAction(sessionCode, `EXIBINDO RESULTADOS da pergunta #${questionId}`);
+            io.to(sessionCode).emit('newQuestion', { ...question }); // Envia a pergunta para a tela
+            io.to(sessionCode).emit('updateResults', { results: question.results, questionType: question.questionType }); // Envia os resultados
         }
     });
 }
