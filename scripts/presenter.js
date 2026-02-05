@@ -120,8 +120,11 @@ socket.on('newQuestion', (question) => {
     if (sessionInfoContainer) sessionInfoContainer.className = 'state-question';
     if (questionScreen) questionScreen.style.display = 'block';
     
-    // Limpa ambos os containers de resultado
-    if (resultsContainer) resultsContainer.innerHTML = '';
+    // Limpa os containers de resultado e prepara para a nova pergunta
+    if (resultsContainer) {
+        resultsContainer.innerHTML = '';
+        resultsContainer.className = ''; // Reseta a classe para o padrão
+    }
     if (wordCloudContainer) wordCloudContainer.innerHTML = '';
 
     const questionText = document.getElementById('question-text');
@@ -135,6 +138,11 @@ socket.on('newQuestion', (question) => {
         } else {
             img.style.display = 'none';
         }
+    }
+
+    // Pre-renderiza as barras para perguntas de múltipla escolha
+    if (question.questionType === 'options') {
+        renderInitialBarResults(question.options);
     }
 
     // Inicia um novo cronômetro se a pergunta tiver um horário de término
@@ -153,17 +161,10 @@ socket.on('newQuestion', (question) => {
 socket.on('updateResults', ({ results, questionType }) => {
     switch (questionType) {
         case 'options':
-            renderBarResults(results);
+            updateBarResults(results);
             break;
         case 'yes_no':
-            if (resultsContainer) {
-                resultsContainer.innerHTML = `
-                    <div style="display: flex; justify-content: space-around; align-items: center; font-size: 10vw;">
-                        <div><span style="font-size: 0.5em; display: block;">Sim</span>👍<br>${results.yes || 0}</div>
-                        <div><span style="font-size: 0.5em; display: block;">Não</span>👎<br>${results.no || 0}</div>
-                    </div>
-                `;
-            }
+            renderYesNoResults(results);
             break;
         default: // Word cloud
             renderWordCloud(results);
@@ -171,55 +172,84 @@ socket.on('updateResults', ({ results, questionType }) => {
     }
 });
 
-function renderBarResults(results) {
-    if (!resultsContainer || !currentQuestion || !currentQuestion.options) return;
-
-    const totalVotes = Object.values(results).reduce((sum, count) => sum + count, 0);
-
+function renderInitialBarResults(options) {
+    if (!resultsContainer) return;
     let html = '';
-    currentQuestion.options.forEach(option => {
-        const count = results[option.id] || 0;
-        const percentage = totalVotes > 0 ? ((count / totalVotes) * 100).toFixed(0) : 0;
-        
+    options.forEach(option => {
         html += `
-            <div class="result-bar-container">
-                <span>${option.text} (${count})</span>
-                <div class="result-bar" style="width: ${percentage}%;">
-                    ${percentage > 10 ? percentage + '%' : ''}
+            <div class="result-bar-container" data-option-id="${option.id}">
+                <span>${option.text}</span>
+                <div class="result-bar-background">
+                    <div class="result-bar" style="width: 0%;">
+                        <span class="result-bar-label">0 (0%)</span>
+                    </div>
                 </div>
             </div>`;
     });
     resultsContainer.innerHTML = html;
 }
 
+function updateBarResults(results) {
+    if (!resultsContainer) return;
+
+    const totalVotes = Object.values(results).reduce((sum, count) => sum + count, 0);
+
+    const barContainers = resultsContainer.querySelectorAll('.result-bar-container');
+
+    barContainers.forEach((container, index) => {
+        const optionId = container.dataset.optionId;
+        if (!optionId) return;
+
+        const count = results[optionId] || 0;
+        const percentage = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+
+        const bar = container.querySelector('.result-bar');
+        const label = container.querySelector('.result-bar-label');
+
+        if (bar) {
+            // Adiciona um atraso escalonado para um efeito de animação mais agradável
+            bar.style.transitionDelay = `${index * 50}ms`;
+            bar.style.width = `${percentage}%`;
+        }
+        if (label) {
+            label.innerText = `${count} (${percentage}%)`;
+        }
+    });
+}
+
 function renderWordCloud(results) {
-    if (!wordCloudContainer) return;
+    if (!resultsContainer) return; // Use resultsContainer for flex layout
+    resultsContainer.className = 'word-cloud-container';
+    resultsContainer.innerHTML = ''; // Clear previous content
+
     const answers = Object.keys(results);
     const counts = Object.values(results);
     const maxCount = Math.max(...counts, 1);
 
     answers.forEach(answer => {
         const count = results[answer];
-        const elementId = 'word-' + btoa(answer).replace(/=/g, '');
-        let element = document.getElementById(elementId);
+        
+        const element = document.createElement('span');
+        element.className = 'word-cloud-item';
+        element.innerText = answer;
 
-        if (!element) {
-            element = document.createElement('span');
-            element.id = elementId;
-            element.className = 'word-cloud-item';
-            element.innerText = answer;
-            element.style.top = `${Math.random() * 90}%`;
-            element.style.left = `${Math.random() * 80}%`;
-            element.style.transform = `rotate(${Math.random() * 60 - 30}deg)`;
-            element.style.color = `hsl(${Math.random() * 360}, 90%, 70%)`;
-            wordCloudContainer.appendChild(element);
-            setTimeout(() => element.style.opacity = 1, 100);
-        }
+        const baseFontSize = 1.2; // em rem
+        const fontSize = baseFontSize + (count / maxCount) * 2.5; // Escala até 2.5rem extra
+        element.style.fontSize = `${fontSize}rem`;
+        element.style.opacity = 0.5 + (count / maxCount) * 0.5;
 
-        const baseFontSize = 1.5; // em vw
-        const fontSize = baseFontSize + (count / maxCount) * 6; // Escala até 6vw extra
-        element.style.fontSize = `${fontSize}vw`;
+        resultsContainer.appendChild(element);
     });
+}
+
+function renderYesNoResults(results) {
+    if (!resultsContainer) return;
+    resultsContainer.innerHTML = `
+        <div class="yes-no-results">
+            <div class="result-option"><span class="label">Sim</span>👍<span class="count">${results.yes || 0}</span></div>
+            <div class="result-option"><span class="label">Não</span>👎<span class="count">${results.no || 0}</span></div>
+        </div>
+    `;
 }
 
 socket.on('themeChanged', ({ theme }) => {
