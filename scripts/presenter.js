@@ -75,6 +75,7 @@ function joinPresenterSession() {
             return;
         }
 
+        applyTheme(response.theme);
         sessionDeadline = response.deadline;
         if (sessionDeadline) {
             const remainingTime = sessionDeadline - Date.now();
@@ -208,6 +209,11 @@ function renderWordCloud(results) {
         element.style.fontSize = `${fontSize}vw`;
     });
 }
+
+socket.on('themeChanged', ({ theme }) => {
+    console.log(`Recebido evento de mudança de tema: ${theme}`);
+    applyTheme(theme);
+});
 
 socket.on('error', (message) => alert(message));
 socket.on('sessionEnded', (message) => {

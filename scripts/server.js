@@ -211,7 +211,7 @@ io.on('connection', (socket) => {
     registerQuestionHandlers(io, socket, sessions, logger);
 
     // 1. CRIAR UMA NOVA SESSÃO
-    socket.on('createSession', async ({ controllerPassword, presenterPassword, deadline }, callback) => {
+    socket.on('createSession', async ({ controllerPassword, presenterPassword, deadline, theme }, callback) => {
         try {
             // Rate limiting
             if (!checkRateLimit(clientIp)) {
@@ -260,7 +260,8 @@ io.on('connection', (socket) => {
                 audienceCount: 0,
                 createdAt: Date.now(),
                 createdByIp: clientIp,
-                isHashed: ENABLE_PASSWORD_HASHING && bcrypt ? true : false
+                isHashed: ENABLE_PASSWORD_HASHING && bcrypt ? true : false,
+                theme: theme || 'light' // Adiciona o tema à sessão
             };
 
             resetRateLimitAttempts(clientIp);
@@ -328,7 +329,7 @@ io.on('connection', (socket) => {
             }
 
             logAction(sessionCode, `${role.toUpperCase()} conectado`);
-            callback({ success: true, deadline: session.deadline });
+            callback({ success: true, deadline: session.deadline, theme: session.theme });
 
             // Enviar estado atual
             socket.emit('questionsUpdated', session.questions);
@@ -338,6 +339,18 @@ io.on('connection', (socket) => {
         } catch (err) {
             logger.error(`Erro ao entrar em sessão: ${err.message}`);
             callback({ success: false, message: 'Erro ao conectar. Tente novamente.' });
+        }
+    });
+
+    // MUDAR O TEMA DA SESSÃO (NOVO)
+    socket.on('changeTheme', ({ sessionCode, theme }) => {
+        const session = sessions[sessionCode];
+        // Apenas o controller pode mudar o tema
+        if (session && socket.role === 'controller') {
+            session.theme = theme;
+            logAction(sessionCode, `TEMA alterado para '${theme}'`);
+            // Notifica todos na sala (presenters, outros controllers) sobre a mudança
+            io.to(sessionCode).emit('themeChanged', { theme });
         }
     });
 

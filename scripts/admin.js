@@ -36,6 +36,7 @@ const createSessionBtn = document.getElementById('create-session-btn');
 const newControllerPassInput = document.getElementById('new-controller-pass');
 const newPresenterPassInput = document.getElementById('new-presenter-pass');
 const deadlineInput = document.getElementById('session-deadline');
+const sessionThemeInput = document.getElementById('session-theme');
 
 // Formulário de Entrar em Sessão
 const joinSessionBtn = document.getElementById('join-session-btn');
@@ -66,6 +67,7 @@ function showMainMenu() {
     newControllerPassInput.value = '';
     newPresenterPassInput.value = '';
     deadlineInput.value = '';
+    if (sessionThemeInput) sessionThemeInput.value = 'light';
     joinSessionCodeInput.value = '';
     joinSessionPassInput.value = '';
 }
@@ -130,6 +132,7 @@ backToMenuBtns.forEach(btn => {
 createSessionBtn?.addEventListener('click', () => {
     const controllerPassword = newControllerPassInput.value.trim();
     const presenterPassword = newPresenterPassInput.value.trim();
+    const theme = sessionThemeInput ? sessionThemeInput.value : 'light';
     const deadlineValue = deadlineInput.value;
     const deadline = deadlineValue ? new Date(new Date().toDateString() + ' ' + deadlineValue).getTime() : null;
 
@@ -147,7 +150,7 @@ createSessionBtn?.addEventListener('click', () => {
     createSessionBtn.disabled = true;
     createSessionBtn.innerText = 'Criando...';
 
-    socket.emit('createSession', { controllerPassword, presenterPassword, deadline }, (response) => {
+    socket.emit('createSession', { controllerPassword, presenterPassword, deadline, theme }, (response) => {
         createSessionBtn.disabled = false;
         createSessionBtn.innerText = 'Criar e Entrar';
         

@@ -29,6 +29,7 @@ const ui = {
         openPresenterBtn: document.getElementById('open-presenter-btn'),
         endSessionBtn: document.getElementById('end-session-btn'),
         questionsContainer: document.getElementById('questions-container'),
+        sessionThemeSwitcher: document.getElementById('session-theme-switcher'),
         // Inputs do formulário
         questionTextInput: document.getElementById('question-text'),
         imageUrlInput: document.getElementById('question-image'),
@@ -74,6 +75,11 @@ const ui = {
             if (confirm('Tem certeza que deseja encerrar esta sessão para todos os participantes?')) {
                 socketHandler.endSession();
             }
+        });
+
+        this.elements.sessionThemeSwitcher?.addEventListener('change', (e) => {
+            const newTheme = e.target.value;
+            socketHandler.changeTheme(newTheme);
         });
     },
 
@@ -203,6 +209,14 @@ const ui = {
         if (sessionDeadline) this.showDeadlineWarning();
     },
 
+    handleThemeChanged(theme) {
+        // Atualiza o seletor para refletir o estado atual (caso outro controller mude)
+        if (this.elements.sessionThemeSwitcher) {
+            this.elements.sessionThemeSwitcher.value = theme;
+            console.log(`INFO: Tema da sessão alterado para '${theme}'.`);
+        }
+    },
+
     showDeadlineWarning() {
         const deadlineAlertEl = document.createElement('div');
         deadlineAlertEl.id = 'deadline-alert';
@@ -231,6 +245,7 @@ const socketHandler = {
         socket.on('newQuestion', (question) => ui.setActiveQuestion(question.id, this));
         socket.on('votingEnded', ({ questionId }) => ui.setVotingEnded(questionId));
         socket.on('sessionEnded', ({ message }) => ui.handleSessionEnded(message));
+        socket.on('themeChanged', ({ theme }) => ui.handleThemeChanged(theme));
 
         socket.on('connect', () => {
             console.log('✅ Conectado ao servidor. Autenticando controller...');
@@ -256,6 +271,7 @@ const socketHandler = {
         }
         socket.emit('joinAdminSession', { sessionCode, password: sessionPassword, role: 'controller' }, (response) => {
             // Não remover a senha do sessionStorage para permitir que a re-autenticação em 'connect' funcione.
+            if (response.theme) ui.handleThemeChanged(response.theme);
             ui.handleJoinResponse(response);
         });
     },
@@ -274,6 +290,10 @@ const socketHandler = {
     endSession: () => {
         const sessionCode = new URLSearchParams(window.location.search).get('session');
         socket.emit('endSession', { sessionCode });
+    },
+    changeTheme: (theme) => {
+        const sessionCode = new URLSearchParams(window.location.search).get('session');
+        socket.emit('changeTheme', { sessionCode, theme });
     },
 };
 
