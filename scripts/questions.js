@@ -12,7 +12,7 @@ function registerQuestionHandlers(io, socket, sessions, logger) {
     };
 
     // CRIAR UMA NOVA PERGUNTA
-    socket.on('createQuestion', ({ sessionCode, question }) => {
+    socket.on('createQuestion', ({ sessionCode, question }, callback) => {
         const session = sessions[sessionCode];
         if (!session) return;
 
@@ -31,10 +31,11 @@ function registerQuestionHandlers(io, socket, sessions, logger) {
 
         logAction(sessionCode, `PERGUNTA #${session.questions.length - 1} criada`);
         io.to(sessionCode).emit('questionsUpdated', session.questions);
+        if (callback) callback({ success: true });
     });
 
     // EDITAR UMA PERGUNTA
-    socket.on('editQuestion', ({ sessionCode, questionId, updatedQuestion }) => {
+    socket.on('editQuestion', ({ sessionCode, questionId, updatedQuestion }, callback) => {
         const session = sessions[sessionCode];
         if (!session || !session.questions[questionId]) return;
 
@@ -53,6 +54,7 @@ function registerQuestionHandlers(io, socket, sessions, logger) {
 
         logAction(sessionCode, `PERGUNTA #${questionId} editada`);
         io.to(sessionCode).emit('questionsUpdated', session.questions);
+        if (callback) callback({ success: true });
     });
 
     // DUPLICAR UMA PERGUNTA

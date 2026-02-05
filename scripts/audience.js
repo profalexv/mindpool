@@ -11,6 +11,7 @@ const socket = io(getBackendUrl(), {
     reconnectionDelayMax: 5000,
     reconnectionAttempts: 5
 });
+
 let currentQuestionId = null;
 let currentTimer = null;
 const audienceTimerEl = document.getElementById('audience-timer');
@@ -23,7 +24,7 @@ function applyTheme(theme = 'light') {
     console.log(`Aplicando tema de plateia: ${theme}`);
     const body = document.body;
     // Remove temas antigos para garantir que apenas um esteja ativo
-    body.classList.remove('theme-light', 'theme-dark', 'theme-corporate');
+    body.classList.remove('theme-light', 'theme-dark', 'theme-corporate', 'theme-fun', 'theme-sublime');
     body.classList.add(`theme-${theme}`);
 }
 
@@ -104,7 +105,8 @@ socket.on('newQuestion', (question) => {
     if (feedback) feedback.innerText = '';
 
     // Inicia um novo cronômetro se a pergunta tiver um e for para exibir
-    if (question.endTime && question.timer?.showToAudience) {
+    // e se estiver aceitando respostas (para não reativar em 'showResults')
+    if (question.acceptingAnswers && question.endTime && question.timer?.showToAudience) {
         if (audienceTimerEl) {
             audienceTimerEl.style.display = 'block';
             currentTimer = new Cronometro(question.endTime, audienceTimerEl, () => {

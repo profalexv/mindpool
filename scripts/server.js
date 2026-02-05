@@ -261,6 +261,7 @@ io.on('connection', (socket) => {
                 createdAt: Date.now(),
                 createdByIp: clientIp,
                 isHashed: ENABLE_PASSWORD_HASHING && bcrypt ? true : false,
+                isAudienceUrlVisible: false, // URL da plateia oculta por padrão
                 theme: theme || 'light' // Adiciona o tema à sessão
             };
 
@@ -352,7 +353,7 @@ io.on('connection', (socket) => {
             }
 
             logAction(sessionCode, `${role.toUpperCase()} conectado`);
-            callback({ success: true, deadline: session.deadline, theme: session.theme, audienceCount: session.audienceCount, activeQuestion: session.activeQuestion });
+            callback({ success: true, deadline: session.deadline, theme: session.theme, audienceCount: session.audienceCount, activeQuestion: session.activeQuestion, isAudienceUrlVisible: session.isAudienceUrlVisible });
 
             // Enviar estado atual
             socket.emit('questionsUpdated', session.questions);
@@ -374,6 +375,16 @@ io.on('connection', (socket) => {
             logAction(sessionCode, `TEMA alterado para '${theme}'`);
             // Notifica todos na sala (presenters, outros controllers) sobre a mudança
             io.to(sessionCode).emit('themeChanged', { theme }); // This already notifies audience
+        }
+    });
+
+    // MOSTRAR/OCULTAR URL DA PLATEIA
+    socket.on('toggleAudienceUrl', ({ sessionCode, visible }) => {
+        const session = sessions[sessionCode];
+        if (session && socket.role === 'controller') {
+            session.isAudienceUrlVisible = visible;
+            logAction(sessionCode, `Visibilidade da URL da plateia alterada para: ${visible}`);
+            io.to(sessionCode).emit('audienceUrlVisibilityChanged', { visible });
         }
     });
 
@@ -475,7 +486,8 @@ io.on('connection', (socket) => {
         if (session.questions[questionId]) {
             io.to(sessionCode).emit('updateResults', { 
                 results: question.results, 
-                questionType: question.questionType 
+                questionType: question.questionType,
+                questionId: questionId
             });
         }
     });

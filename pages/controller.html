@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Painel de Controle</title>
     <link rel="stylesheet" href="/styles/mindpool.css">
+    <link rel="stylesheet" href="/styles/controller.css">
 </head>
 <body class="controller-page">
     <header class="controller-header">
@@ -17,10 +18,13 @@
                     <option value="light">Claro</option>
                     <option value="dark">Escuro</option>
                     <option value="corporate">Corporativo</option>
+                    <option value="fun">Divertido</option>
+                    <option value="sublime">Sublime</option>
                 </select>
             </div>
             <div class="controls-group">
                 <button id="open-presenter-btn">Abrir Apresentação</button>
+                <button id="toggle-url-btn" class="secondary-button">Exibir Endereço</button>
                 <button id="end-session-btn" class="danger">Encerrar Sessão</button>
             </div>
         </div>
@@ -72,6 +76,13 @@
                 <button id="create-question-btn">Criar Pergunta</button>
                 <button id="cancel-edit-btn" class="secondary-button" style="display: none; margin-top: 10px;">Cancelar Edição</button>
             </div>
+
+            <div id="presenter-preview-container">
+                <h3>Prévia do Apresentador</h3>
+                <div id="presenter-preview-box" title="Clique para ampliar">
+                    <!-- Iframe será inserido aqui -->
+                </div>
+            </div>
         </div>
         <div class="list-column">
             <div class="question-list">
@@ -90,6 +101,11 @@
     </main>
 
     <div id="toast-container"></div>
+
+    <!-- Modal para a prévia ampliada -->
+    <div id="preview-modal-overlay" style="display: none;">
+        <!-- O iframe será movido para cá quando o modal for aberto -->
+    </div>
 
     <input type="file" id="load-questions-input" accept=".json" style="display: none;">
 

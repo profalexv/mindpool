@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tela de Apresentação</title>
     <link rel="stylesheet" href="/styles/mindpool.css">
+    <link rel="stylesheet" href="/styles/presenter.css">
 </head>
 <body class="presenter-page">
     <div class="content">
@@ -21,7 +22,10 @@
 
     <!-- Container persistente para QR Code e Código da Sessão -->
     <div id="session-info-container" class="state-waiting">
-        <div id="qrcode"></div>
+        <div class="qr-code-area">
+            <div id="qrcode"></div>
+            <p id="audience-url-display"></p>
+        </div>
         <div class="text-info">
             <p>Participe com o código:</p>
             <h1 id="session-code-display"></h1>

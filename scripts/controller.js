@@ -24,7 +24,7 @@ function applyTheme(theme = 'light') {
     console.log(`Aplicando tema de controller: ${theme}`);
     const body = document.body;
     // Remove temas antigos para garantir que apenas um esteja ativo
-    body.classList.remove('theme-light', 'theme-dark', 'theme-corporate');
+    body.classList.remove('theme-light', 'theme-dark', 'theme-corporate', 'theme-fun', 'theme-sublime');
     body.classList.add(`theme-${theme}`);
 }
 
@@ -44,6 +44,7 @@ const ui = {
         createBtn: document.getElementById('create-question-btn'),
         cancelEditBtn: document.getElementById('cancel-edit-btn'),
         openPresenterBtn: document.getElementById('open-presenter-btn'),
+        toggleUrlBtn: document.getElementById('toggle-url-btn'),
         endSessionBtn: document.getElementById('end-session-btn'),
         questionsContainer: document.getElementById('questions-container'),
         saveQuestionsBtn: document.getElementById('save-questions-btn'),
@@ -53,6 +54,8 @@ const ui = {
         audienceCounter: document.getElementById('audience-counter'),
         toastContainer: document.getElementById('toast-container'),
         formColumn: document.querySelector('.form-column'),
+        presenterPreviewBox: document.getElementById('presenter-preview-box'),
+        previewModalOverlay: document.getElementById('preview-modal-overlay'),
         // Inputs do formulário
         questionTextInput: document.getElementById('question-text'),
         imageUrlInput: document.getElementById('question-image'),
@@ -60,6 +63,18 @@ const ui = {
         charLimitInput: document.getElementById('char-limit'),
         timerDurationInput: document.getElementById('timer-duration'),
         timerShowAudienceCheckbox: document.getElementById('timer-show-audience'),
+    },
+
+    setCreateButtonState(isLoading) {
+        if (!this.elements.createBtn) return;
+        const originalText = this.editingQuestionId !== null ? 'Salvar Alterações' : 'Criar Pergunta';
+        if (isLoading) {
+            this.elements.createBtn.disabled = true;
+            this.elements.createBtn.innerHTML = `<span class="spinner"></span> Processando...`;
+        } else {
+            this.elements.createBtn.disabled = false;
+            this.elements.createBtn.innerText = originalText;
+        }
     },
 
     init(socketHandler) {
@@ -73,25 +88,45 @@ const ui = {
         this.elements.timerEnabledCheckbox?.addEventListener('change', (e) => this.toggleTimerOptions(e.target.checked));
         this.elements.questionTypeSelect?.addEventListener('change', (e) => this.toggleQuestionTypeOptions(e.target.value));
 
+        this.setupPresenterPreview();
+
         // Add listeners to remove validation error on input
         this.elements.questionTextInput.addEventListener('input', () => this.elements.questionTextInput.classList.remove('invalid'));
         this.elements.optionsTextInput.addEventListener('input', () => this.elements.optionsTextInput.classList.remove('invalid'));
 
         this.elements.createBtn?.addEventListener('click', () => {
+            this.setCreateButtonState(true);
             const questionData = this.getQuestionData();
+
             if (questionData) {
+                const onComplete = (response) => {
+                    if (response && response.success) {
+                        this.exitEditMode();
+                    }
+                    this.setCreateButtonState(false);
+                };
+
                 if (this.editingQuestionId !== null) {
-                    socketHandler.editQuestion(this.editingQuestionId, questionData);
+                    socketHandler.editQuestion(this.editingQuestionId, questionData, onComplete);
                 } else {
-                    socketHandler.createQuestion(questionData);
+                    socketHandler.createQuestion(questionData, onComplete);
                 }
-                this.exitEditMode();
+            } else {
+                // If validation fails locally, re-enable the button
+                this.setCreateButtonState(false);
             }
         });
 
         this.elements.cancelEditBtn?.addEventListener('click', (e) => {
             e.preventDefault();
             this.exitEditMode();
+        });
+
+        this.elements.toggleUrlBtn?.addEventListener('click', () => {
+            const isHiding = this.elements.toggleUrlBtn.innerText.includes('Ocultar');
+            const newVisibility = !isHiding;
+            socketHandler.toggleAudienceUrl(newVisibility);
+            this.elements.toggleUrlBtn.innerText = newVisibility ? 'Ocultar Endereço' : 'Exibir Endereço';
         });
 
         if (this.elements.openPresenterBtn) {
@@ -153,6 +188,64 @@ const ui = {
             // Previne o movimento da pergunta ativa
             onMove: (evt) => !evt.dragged.classList.contains('active'),
         });
+    },
+
+    setupPresenterPreview() {
+        const sessionCode = new URLSearchParams(window.location.search).get('session');
+        const presenterPassword = sessionStorage.getItem('mindpool_presenter_pass');
+        const previewContainer = document.getElementById('presenter-preview-container');
+
+        if (!presenterPassword || !this.elements.presenterPreviewBox || !previewContainer) {
+            if (previewContainer) previewContainer.style.display = 'none';
+            return;
+        }
+
+        // Limpa qualquer prévia anterior para evitar duplicatas em cenários de recarregamento
+        this.elements.presenterPreviewBox.innerHTML = '';
+
+        // --- Criação do Iframe ---
+        const iframe = document.createElement('iframe');
+        iframe.id = 'presenter-preview-iframe';
+        localStorage.setItem('mindpool_temp_pass', presenterPassword);
+        iframe.src = `/pages/presenter.html?session=${sessionCode}`;
+
+        // --- Lógica de Escala ---
+        const iframeWidth = 1280;
+        const iframeHeight = 720;
+        
+        const setThumbnailScale = () => {
+            if (!this.elements.presenterPreviewBox.isConnected) return;
+            const previewBoxWidth = this.elements.presenterPreviewBox.offsetWidth;
+            const scale = previewBoxWidth / iframeWidth;
+            iframe.style.transform = `scale(${scale})`;
+            // Ajusta a altura do container para manter o aspect ratio
+            this.elements.presenterPreviewBox.style.height = `${iframeHeight * scale}px`;
+        };
+
+        iframe.onload = () => {
+            setThumbnailScale();
+            this.elements.presenterPreviewBox.appendChild(iframe);
+        };
+        window.addEventListener('resize', setThumbnailScale);
+
+        // --- Lógica do Modal ---
+        const openModal = () => {
+            const modalWidth = window.innerWidth * 0.9;
+            const modalHeight = window.innerHeight * 0.9;
+            const scale = Math.min(modalWidth / iframeWidth, modalHeight / iframeHeight);
+            iframe.style.transform = `scale(${scale})`;
+            this.elements.previewModalOverlay.appendChild(iframe);
+            this.elements.previewModalOverlay.style.display = 'flex';
+        };
+
+        const closeModal = () => {
+            this.elements.presenterPreviewBox.appendChild(iframe);
+            this.elements.previewModalOverlay.style.display = 'none';
+            setThumbnailScale(); // Recalcula a escala da miniatura
+        };
+
+        this.elements.presenterPreviewBox.addEventListener('click', openModal);
+        this.elements.previewModalOverlay.addEventListener('click', closeModal);
     },
 
     getQuestionData() {
@@ -247,6 +340,9 @@ const ui = {
             return;
         }
 
+        // After rendering, always reset the create button state
+        this.setCreateButtonState(false);
+
         validQuestions.forEach((q, index) => {
             const isConcluded = q.isConcluded;
             const isActive = q.id === ui.activeQuestionId;
@@ -261,10 +357,25 @@ const ui = {
             div.id = `question-item-${q.id}`;
             div.innerHTML = `
                 <span class="drag-handle" title="Arraste para reordenar">↕️</span>
-                <p><strong>${q.text}</strong></p>
+                <div class="question-main">
+                    <p><strong>${q.text}</strong></p>
+                    <span class="vote-counter" id="vote-counter-${q.id}" title="Total de votos"></span>
+                </div>
                 <div class="question-item-controls" id="question-controls-${q.id}"></div>
             `;
             container.appendChild(div);
+
+            // Atualiza a contagem de votos inicial
+            const totalVotes = Object.values(q.results || {}).reduce((sum, count) => sum + count, 0);
+            const counterEl = div.querySelector(`#vote-counter-${q.id}`);
+            if (counterEl) {
+                if (totalVotes > 0) {
+                    counterEl.innerText = `🗳️ ${totalVotes}`;
+                    counterEl.style.display = 'inline-block';
+                } else {
+                    counterEl.style.display = 'none';
+                }
+            }
 
             const controlsDiv = div.querySelector(`#question-controls-${q.id}`);
 
@@ -326,6 +437,13 @@ const ui = {
             controlsDiv.appendChild(deleteBtn);
             if (showResultsBtn) {
                 controlsDiv.appendChild(showResultsBtn);
+
+                const exportCsvBtn = document.createElement('button');
+                exportCsvBtn.innerHTML = '📊 <span class="btn-text">Exportar</span>';
+                exportCsvBtn.className = 'icon-button export-csv-btn';
+                exportCsvBtn.title = 'Exportar Resultados para CSV';
+                exportCsvBtn.onclick = () => this.exportQuestionResultsToCSV(q);
+                controlsDiv.appendChild(exportCsvBtn);
             }
             controlsDiv.appendChild(startBtn);
             controlsDiv.appendChild(stopBtn);
@@ -516,6 +634,45 @@ const ui = {
         this.elements.questionTextInput.focus();
     },
 
+    exportQuestionResultsToCSV(question) {
+        if (!question || !question.results || Object.keys(question.results).length === 0) {
+            alert('Não há resultados para exportar para esta pergunta.');
+            return;
+        }
+
+        let csvContent = "data:text/csv;charset=utf-8,";
+        const rows = [];
+
+        if (question.questionType === 'options') {
+            rows.push(['Opção', 'Votos']);
+            question.options.forEach(opt => {
+                rows.push([`"${opt.text.replace(/"/g, '""')}"`, question.results[opt.id] || 0]);
+            });
+        } else if (question.questionType === 'yes_no') {
+            rows.push(['Opção', 'Votos']);
+            rows.push(['Sim', question.results.yes || 0]);
+            rows.push(['Não', question.results.no || 0]);
+        } else { // Text-based answers
+            rows.push(['Resposta', 'Contagem']);
+            for (const [answer, count] of Object.entries(question.results)) {
+                rows.push([`"${answer.replace(/"/g, '""')}"`, count]);
+            }
+        }
+
+        rows.forEach(rowArray => {
+            csvContent += rowArray.join(",") + "\r\n";
+        });
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        const sanitizedText = question.text.replace(/[^a-z0-9]/gi, '_').slice(0, 20);
+        link.setAttribute("download", `resultados_${sanitizedText}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    },
+
     handleSessionEnded: (message) => { alert(message); window.location.href = '/'; },
 
     handleJoinResponse(response) {
@@ -534,7 +691,28 @@ const ui = {
             // 'newQuestion' event that follows shortly after joining.
             this.activeQuestionId = response.activeQuestion;
         }
+        // Atualiza o texto do botão com base no estado recebido do servidor
+        if (response.isAudienceUrlVisible) {
+            this.elements.toggleUrlBtn.innerText = 'Ocultar Endereço';
+        } else {
+            this.elements.toggleUrlBtn.innerText = 'Exibir Endereço';
+        }
         if (sessionDeadline) this.showDeadlineWarning();
+    },
+
+    updateVoteCount(questionId, results) {
+        const counterEl = document.getElementById(`vote-counter-${questionId}`);
+        if (!counterEl) return;
+
+        const totalVotes = Object.values(results).reduce((sum, count) => sum + count, 0);
+
+        if (totalVotes > 0) {
+            counterEl.innerText = `🗳️ ${totalVotes}`;
+            counterEl.style.display = 'inline-block';
+        } else {
+            // Se os votos forem zerados (ex: reabrir votação), esconde o contador
+            counterEl.style.display = 'none';
+        }
     },
 
     updateAudienceCount(count, joined = null) {
@@ -597,6 +775,7 @@ const socketHandler = {
         socket.on('sessionEnded', ({ message }) => ui.handleSessionEnded(message));
         socket.on('themeChanged', ({ theme }) => ui.handleThemeChanged(theme));
         socket.on('audienceCountUpdated', ({ count, joined }) => ui.updateAudienceCount(count, joined));
+        socket.on('updateResults', ({ questionId, results }) => ui.updateVoteCount(questionId, results));
 
         socket.on('connect', () => {
             console.log('✅ Conectado ao servidor. Autenticando controller...');
@@ -646,10 +825,6 @@ const socketHandler = {
         const sessionCode = new URLSearchParams(window.location.search).get('session');
         socket.emit('changeTheme', { sessionCode, theme });
     },
-    editQuestion: (questionId, questionData) => {
-        const sessionCode = new URLSearchParams(window.location.search).get('session');
-        socket.emit('editQuestion', { sessionCode, questionId, updatedQuestion: questionData });
-    },
     deleteQuestion: (questionId) => {
         const sessionCode = new URLSearchParams(window.location.search).get('session');
         socket.emit('deleteQuestion', { sessionCode, questionId });
@@ -661,6 +836,18 @@ const socketHandler = {
     showResults: (questionId) => {
         const sessionCode = new URLSearchParams(window.location.search).get('session');
         socket.emit('showResults', { sessionCode, questionId });
+    },
+    createQuestion: (questionData, callback) => {
+        const sessionCode = new URLSearchParams(window.location.search).get('session');
+        socket.emit('createQuestion', { sessionCode, question: questionData }, callback);
+    },
+    editQuestion: (questionId, questionData, callback) => {
+        const sessionCode = new URLSearchParams(window.location.search).get('session');
+        socket.emit('editQuestion', { sessionCode, questionId, updatedQuestion: questionData }, callback);
+    },
+    toggleAudienceUrl: (visible) => {
+        const sessionCode = new URLSearchParams(window.location.search).get('session');
+        socket.emit('toggleAudienceUrl', { sessionCode, visible });
     },
 };
 

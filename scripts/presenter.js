@@ -20,7 +20,7 @@ function applyTheme(theme = 'light') {
     console.log(`Aplicando tema: ${theme}`);
     const body = document.body;
     // Remove temas antigos para garantir que apenas um esteja ativo
-    body.classList.remove('theme-light', 'theme-dark', 'theme-corporate');
+    body.classList.remove('theme-light', 'theme-dark', 'theme-corporate', 'theme-fun', 'theme-sublime');
     body.classList.add(`theme-${theme}`);
 }
 
@@ -36,7 +36,10 @@ function getSessionPassword() {
             console.log('INFO: Senha temporária encontrada no localStorage, movendo para sessionStorage.');
             password = tempPass;
             sessionStorage.setItem('mindpool_session_pass', tempPass); // Move para o sessionStorage desta aba
-            localStorage.removeItem('mindpool_temp_pass'); // Limpa o localStorage para não ser reutilizado
+            // Não removemos o item do localStorage. Isso permite que a prévia no controller
+            // funcione de forma consistente mesmo após recarregar a página, embora
+            // deixe a senha do presenter no localStorage. É um trade-off para a funcionalidade.
+            // localStorage.removeItem('mindpool_temp_pass');
         }
     }
 
@@ -66,6 +69,23 @@ if (qrcodeContainer) {
         width: 256,
         height: 256,
     });
+
+    const audienceUrlDisplay = document.getElementById('audience-url-display');
+    if (audienceUrlDisplay) {
+        audienceUrlDisplay.innerText = audienceUrl.replace(/^https?:\/\//, '');
+        audienceUrlDisplay.title = 'Clique para copiar o link';
+        audienceUrlDisplay.addEventListener('click', () => {
+            navigator.clipboard.writeText(audienceUrl).then(() => {
+                const originalText = audienceUrlDisplay.innerText;
+                audienceUrlDisplay.innerText = 'Copiado!';
+                audienceUrlDisplay.style.cursor = 'default';
+                setTimeout(() => {
+                    audienceUrlDisplay.innerText = originalText;
+                    audienceUrlDisplay.style.cursor = 'pointer';
+                }, 2000);
+            }).catch(err => console.error('Falha ao copiar o link: ', err));
+        });
+    }
 }
 
 function joinPresenterSession() {
@@ -88,22 +108,14 @@ function joinPresenterSession() {
         }
 
         applyTheme(response.theme);
-        sessionDeadline = response.deadline;
-        if (sessionDeadline) {
-            const remainingTime = sessionDeadline - Date.now();
-            const deadlineAlertEl = document.getElementById('deadline-alert');
-
-            if (remainingTime <= 0) {
-                // Se o prazo já passou, exibe a mensagem imediatamente.
-                if (deadlineAlertEl) deadlineAlertEl.style.display = 'block';
-            } else {
-                // Agenda a exibição da mensagem para quando o prazo for atingido.
-                // Isso é mais eficiente que setInterval.
-                setTimeout(() => {
-                    if (deadlineAlertEl) deadlineAlertEl.style.display = 'block';
-                }, remainingTime);
+        // Ao entrar, verifica se a URL já deve estar visível
+        if (response.isAudienceUrlVisible) {
+            const audienceUrlDisplay = document.getElementById('audience-url-display');
+            if (audienceUrlDisplay) {
+                audienceUrlDisplay.style.display = 'block';
             }
         }
+        // A lógica de deadline da sessão foi removida da tela do presenter para evitar confusão com o timer da pergunta.
     });
 }
 
@@ -146,7 +158,8 @@ socket.on('newQuestion', (question) => {
     }
 
     // Inicia um novo cronômetro se a pergunta tiver um horário de término
-    if (question.endTime) {
+    // e se estiver aceitando respostas (para não reativar em 'showResults')
+    if (question.acceptingAnswers && question.endTime) {
         if (presenterTimerEl) {
             presenterTimerEl.style.display = 'block';
             currentTimer = new Cronometro(question.endTime, presenterTimerEl, () => {
@@ -167,7 +180,7 @@ socket.on('updateResults', ({ results, questionType }) => {
             renderYesNoResults(results);
             break;
         default: // Word cloud
-            renderWordCloud(results);
+            renderTextResults(results);
             break;
     }
 });
@@ -217,29 +230,38 @@ function updateBarResults(results) {
     });
 }
 
-function renderWordCloud(results) {
-    if (!resultsContainer) return; // Use resultsContainer for flex layout
-    resultsContainer.className = 'word-cloud-container';
+function renderTextResults(results) {
+    if (!resultsContainer) return;
+    resultsContainer.className = 'text-results-container';
     resultsContainer.innerHTML = ''; // Clear previous content
 
-    const answers = Object.keys(results);
-    const counts = Object.values(results);
-    const maxCount = Math.max(...counts, 1);
+    // Converte o objeto de resultados em um array, ordena por contagem (decrescente)
+    const sortedAnswers = Object.entries(results)
+        .sort(([, countA], [, countB]) => countB - countA);
 
-    answers.forEach(answer => {
-        const count = results[answer];
+    const list = document.createElement('ul');
+    list.className = 'text-results-list';
+
+    sortedAnswers.forEach(([answer, count], index) => {
+        const listItem = document.createElement('li');
+        listItem.className = 'text-results-item';
+        listItem.style.animationDelay = `${index * 100}ms`;
         
-        const element = document.createElement('span');
-        element.className = 'word-cloud-item';
-        element.innerText = answer;
+        const answerText = document.createElement('span');
+        answerText.className = 'text-results-answer';
+        answerText.innerText = answer;
+        listItem.appendChild(answerText);
 
-        const baseFontSize = 1.2; // em rem
-        const fontSize = baseFontSize + (count / maxCount) * 2.5; // Escala até 2.5rem extra
-        element.style.fontSize = `${fontSize}rem`;
-        element.style.opacity = 0.5 + (count / maxCount) * 0.5;
-
-        resultsContainer.appendChild(element);
+        if (count > 1) {
+            const answerCount = document.createElement('span');
+            answerCount.className = 'text-results-count';
+            answerCount.innerText = `x${count}`;
+            listItem.appendChild(answerCount);
+        }
+        list.appendChild(listItem);
     });
+
+    resultsContainer.appendChild(list);
 }
 
 function renderYesNoResults(results) {
@@ -255,6 +277,14 @@ function renderYesNoResults(results) {
 socket.on('themeChanged', ({ theme }) => {
     console.log(`Recebido evento de mudança de tema: ${theme}`);
     applyTheme(theme);
+});
+
+// Ouve por mudanças na visibilidade da URL
+socket.on('audienceUrlVisibilityChanged', ({ visible }) => {
+    const audienceUrlDisplay = document.getElementById('audience-url-display');
+    if (audienceUrlDisplay) {
+        audienceUrlDisplay.style.display = visible ? 'block' : 'none';
+    }
 });
 
 socket.on('error', (message) => alert(message));
