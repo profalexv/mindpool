@@ -168,6 +168,12 @@ app.get('/health', (req, res) => {
     });
 });
 
+// Rota de status exigida pelo gateway orquestrador (Regra 3)
+app.get('/status', (req, res) => {
+    // Retorna uma resposta simples de sucesso para o health check do gateway.
+    res.status(200).json({ status: 'ok' });
+});
+
 // ===== ROTA PARA EXPORT DE RESULTADOS =====
 app.get('/api/export/:sessionCode/:format', (req, res) => {
     const { sessionCode, format } = req.params;

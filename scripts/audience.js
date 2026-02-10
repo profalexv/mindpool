@@ -1,16 +1,21 @@
-const getBackendUrl = () => {
-    const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    return isDevelopment ? 'http://localhost:3000' : 'https://mindpool-backend.onrender.com';
-};
+const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-const socket = io(getBackendUrl(), {
+// Define a URL e as opções de conexão com base no ambiente para ser compatível com o gateway orquestrador.
+const socketUrl = isDevelopment ? 'http://localhost:3000' : undefined; // `undefined` conecta à mesma origem (o gateway).
+const socketOptions = {
     transports: ['websocket', 'polling'],
     withCredentials: true,
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
-    reconnectionAttempts: 5
-});
+    reconnectionAttempts: 5,
+    // Em produção, o gateway roteia '/mindpool' para este serviço.
+    // O path do Socket.IO precisa refletir isso para que a conexão funcione através do gateway.
+    // Em desenvolvimento, usa o path padrão.
+    path: isDevelopment ? '/socket.io' : '/mindpool/socket.io'
+};
+
+const socket = io(socketUrl, socketOptions);
 
 let currentQuestionId = null;
 let currentTimer = null;
