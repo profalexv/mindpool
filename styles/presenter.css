@@ -13,11 +13,6 @@
     }
 }
 
-/* Garante que o alerta de deadline da sessão (removido) permaneça oculto */
-#deadline-alert {
-    display: none;
-}
-
 /* Estilos para a área do QR Code e URL */
 .qr-code-area {
     display: flex;
