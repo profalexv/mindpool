@@ -21,6 +21,8 @@ let questionsToImport = []; // Armazena perguntas carregadas de um arquivo
 // ===== SELEÇÃO DE ELEMENTOS DO DOM =====
 const pageTitle = document.getElementById('page-title');
 const errorMsg = document.getElementById('error-message');
+const connectionStatusBanner = document.getElementById('connection-status-banner');
+const connectionStatusText = document.getElementById('connection-status-text');
 
 // Seções
 const actionButtonsDiv = document.getElementById('action-buttons');
@@ -60,6 +62,31 @@ function clearError() {
 function showError(message) {
     errorMsg.innerText = message;
     errorMsg.style.display = 'block';
+}
+
+function setConnectionStatus(status, message) {
+    if (!connectionStatusBanner || !connectionStatusText) return;
+
+    const buttonsToDisable = [createSessionMainBtn, joinSessionMainBtn];
+
+    switch (status) {
+        case 'connecting':
+            connectionStatusBanner.classList.remove('error');
+            connectionStatusBanner.classList.add('visible');
+            connectionStatusText.innerText = message || 'Conectando ao servidor...';
+            buttonsToDisable.forEach(btn => btn && (btn.disabled = true));
+            break;
+        case 'connected':
+            connectionStatusBanner.classList.remove('visible');
+            buttonsToDisable.forEach(btn => btn && (btn.disabled = false));
+            break;
+        case 'error':
+            connectionStatusBanner.classList.add('error');
+            connectionStatusBanner.classList.add('visible');
+            connectionStatusText.innerText = message || 'Falha na conexão.';
+            buttonsToDisable.forEach(btn => btn && (btn.disabled = true));
+            break;
+    }
 }
 
 function showMainMenu() {
@@ -277,16 +304,25 @@ joinSessionBtn?.addEventListener('click', () => {
 socket.on('connect', () => {
     console.log('✅ Conectado ao servidor');
     clearError();
+    setConnectionStatus('connected');
 });
 
 socket.on('connect_error', (error) => {
     console.error('❌ Erro de conexão:', error);
     showError('Não foi possível conectar ao servidor. Verifique a internet e tente novamente.');
+    setConnectionStatus('error', 'Falha na conexão. Tentando reconectar...');
 });
 
 socket.on('disconnect', (reason) => {
     console.warn('⚠️  Desconectado do servidor:', reason);
+    // Só mostra o banner se não for uma desconexão manual (ex: navegação)
+    if (reason !== 'io client disconnect') {
+        setConnectionStatus('connecting', 'Conexão perdida. Reconectando...');
+    }
 });
 
 // Inicializa o estado dos checkboxes ao carregar a página
 document.addEventListener('DOMContentLoaded', handlePresenterPassCheckboxes);
+
+// Inicia a UI no estado de "conectando"
+setConnectionStatus('connecting');
