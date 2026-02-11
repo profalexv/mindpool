@@ -42,6 +42,7 @@ const loadSessionInput = document.getElementById('load-session-input');
 const createSessionBtn = document.getElementById('create-session-btn');
 const newControllerPassInput = document.getElementById('new-controller-pass');
 const newPresenterPassInput = document.getElementById('new-presenter-pass');
+const repeatControllerPassCheckbox = document.getElementById('repeat-controller-pass');
 const deadlineInput = document.getElementById('session-deadline');
 const sessionThemeInput = document.getElementById('session-theme');
 
@@ -77,6 +78,7 @@ function showMainMenu() {
     if (sessionThemeInput) sessionThemeInput.value = 'light';
     joinSessionCodeInput.value = '';
     joinSessionPassInput.value = '';
+    if (repeatControllerPassCheckbox) repeatControllerPassCheckbox.checked = true; // Reset para o padrão
     questionsToImport = []; // Limpa perguntas importadas
 }
 
@@ -96,7 +98,7 @@ if (!role || role === 'controller') {
         presenterBackBtn.addEventListener('click', (e) => {
             e.preventDefault(); // Prevenir que o outro listener de 'back-to-menu' seja acionado
             e.stopPropagation();
-            window.location.href = '/index.html';
+            window.location.href = '../index.html';
         });
     }
 } else {
@@ -125,7 +127,7 @@ joinSessionMainBtn?.addEventListener('click', () => {
 });
 
 backToIndexBtn.addEventListener('click', () => {
-    window.location.href = '/index.html';
+    window.location.href = '../index.html';
 });
 
 // Botões de "Voltar" dentro dos formulários
@@ -135,6 +137,27 @@ backToMenuBtns.forEach(btn => {
         showMainMenu();
     });
 });
+
+// Lógica para os checkboxes de senha do apresentador
+function handlePresenterPassCheckboxes() {
+    const presenterInputGroup = newPresenterPassInput.closest('.form-group'); // Assumindo que o input está dentro de um .form-group
+    if (!presenterInputGroup) return;
+
+    if (repeatControllerPassCheckbox.checked) {
+        newPresenterPassInput.disabled = true;
+        newPresenterPassInput.required = false;
+        newPresenterPassInput.value = ''; // Limpa o valor quando desabilitado
+        // presenterInputGroup.style.display = 'none'; // Não ocultar, apenas desabilitar
+        presenterInputGroup.style.display = 'none';
+    } else {
+        newPresenterPassInput.disabled = false;
+        newPresenterPassInput.required = true;
+        // presenterInputGroup.style.display = 'block';
+        presenterInputGroup.style.display = 'block';
+    }
+}
+
+repeatControllerPassCheckbox?.addEventListener('change', handlePresenterPassCheckboxes);
 
 loadFromFileBtn?.addEventListener('click', () => {
     loadSessionInput.click();
@@ -178,22 +201,38 @@ loadSessionInput?.addEventListener('change', (e) => {
 // Lógica de criação de sessão
 createSessionBtn?.addEventListener('click', () => {
     const controllerPassword = newControllerPassInput.value.trim();
-    const presenterPassword = newPresenterPassInput.value.trim();
+    let presenterPassword = newPresenterPassInput.value.trim();
+    const repeatControllerPass = repeatControllerPassCheckbox.checked;
     const theme = sessionThemeInput ? sessionThemeInput.value : 'light';
     const deadlineValue = deadlineInput.value;
     const deadline = deadlineValue ? new Date(new Date().toDateString() + ' ' + deadlineValue).getTime() : null;
 
     clearError();
 
-    if (!controllerPassword || !presenterPassword) {
-        showError('Por favor, preencha ambas as senhas.');
+    // Validação da senha do Controller
+    if (!controllerPassword) {
+        showError('A senha de Controller é obrigatória.');
         return;
     }
-    if (controllerPassword.length < 4 || presenterPassword.length < 4) {
-        showError('As senhas devem ter pelo menos 4 caracteres.');
+    if (controllerPassword.length < 4) {
+        showError('A senha de Controller deve ter pelo menos 4 caracteres.');
         return;
     }
 
+    // Validação da senha do Presenter (se não for para repetir a do controller)
+    if (!repeatControllerPass) {
+        if (!presenterPassword) {
+            showError('A senha de Presenter é obrigatória.');
+            return;
+        }
+        if (presenterPassword.length < 4) {
+            showError('A senha de Presenter deve ter pelo menos 4 caracteres.');
+            return;
+        }
+    } else {
+        presenterPassword = controllerPassword; // Usa a senha do controller se a opção estiver marcada
+        return;
+    }
     createSessionBtn.disabled = true;
     createSessionBtn.innerText = 'Criando...';
 
@@ -209,7 +248,7 @@ createSessionBtn?.addEventListener('click', () => {
             sessionStorage.setItem('mindpool_session_pass', controllerPassword);
             sessionStorage.setItem('mindpool_presenter_pass', presenterPassword);
 
-            window.location.href = `/pages/controller.html?session=${response.sessionCode}`;
+            window.location.href = `controller.html?session=${response.sessionCode}`;
         } else {
             showError(response.message || 'Ocorreu um erro ao criar a sessão.');
         }
@@ -233,7 +272,7 @@ joinSessionBtn?.addEventListener('click', () => {
     sessionStorage.setItem('mindpool_session_code', sessionCode);
     sessionStorage.setItem('mindpool_session_pass', password);
     const targetPage = roleToJoin === 'controller' ? 'controller' : roleToJoin;
-    window.location.href = `/pages/${targetPage}.html?session=${sessionCode}`;
+    window.location.href = `${targetPage}.html?session=${sessionCode}`;
 });
 
 // ===== EVENTOS DE CONEXÃO =====
@@ -250,3 +289,6 @@ socket.on('connect_error', (error) => {
 socket.on('disconnect', (reason) => {
     console.warn('⚠️  Desconectado do servidor:', reason);
 });
+
+// Inicializa o estado dos checkboxes ao carregar a página
+document.addEventListener('DOMContentLoaded', handlePresenterPassCheckboxes);

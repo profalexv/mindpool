@@ -134,7 +134,7 @@ socket.on('themeChanged', ({ theme }) => {
 socket.on('error', (message) => {
     console.error('Erro recebido do servidor:', message);
     alert(`Erro: ${message}\n\nVocê será redirecionado para a página inicial.`);
-    window.location.href = '/index.html';
+    window.location.href = '../index.html';
 });
 
 socket.on('connect', () => {
@@ -157,7 +157,7 @@ function submitAnswer(answer) {
 
 socket.on('sessionEnded', (message) => {
     alert(message);
-    window.location.href = '/';
+    window.location.href = '../index.html';
 });
 
 socket.on('votingEnded', ({ questionId }) => {

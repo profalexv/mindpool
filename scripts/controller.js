@@ -139,7 +139,7 @@ const ui = {
                 this.elements.openPresenterBtn.addEventListener('click', () => {
                     // Usa localStorage para passar a senha para a nova aba de forma segura
                     localStorage.setItem('mindpool_temp_pass', presenterPassword);
-                    window.open(`/pages/presenter.html?session=${sessionCode}`, '_blank');
+                    window.open(`presenter.html?session=${sessionCode}`, '_blank');
                 });
             } else {
                 this.elements.openPresenterBtn.disabled = true;
@@ -212,7 +212,7 @@ const ui = {
         const iframe = document.createElement('iframe');
         iframe.id = 'presenter-preview-iframe';
         localStorage.setItem('mindpool_temp_pass', presenterPassword);
-        iframe.src = `/pages/presenter.html?session=${sessionCode}`;
+        iframe.src = `presenter.html?session=${sessionCode}`;
 
         // --- Lógica de Escala ---
         const iframeWidth = 1280;
@@ -678,12 +678,12 @@ const ui = {
         document.body.removeChild(link);
     },
 
-    handleSessionEnded: (message) => { alert(message); window.location.href = '/'; },
+    handleSessionEnded: (message) => { alert(message); window.location.href = '../index.html'; },
 
     handleJoinResponse(response) {
         if (!response.success) {
             alert(response.message);
-            window.location.href = `/pages/admin.html?role=controller`;
+            window.location.href = `admin.html?role=controller`;
             return;
         }
         sessionDeadline = response.deadline;
@@ -801,7 +801,7 @@ const socketHandler = {
         const sessionPassword = sessionStorage.getItem('mindpool_session_pass');
         if (!sessionPassword) {
             alert('Erro de autenticação. Por favor, volte e entre na sessão novamente.');
-            window.location.href = `/pages/admin.html?role=controller`;
+            window.location.href = `admin.html?role=controller`;
             return;
         }
         socket.emit('joinAdminSession', { sessionCode, password: sessionPassword, role: 'controller' }, (response) => {

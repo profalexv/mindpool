@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Acesso Administrativo</title>
-    <link rel="stylesheet" href="/styles/mindpool.css">
+    <link rel="stylesheet" href="../styles/mindpool.css">
 </head>
 <body class="admin-page centered-layout">
     <div class="container">
@@ -32,6 +32,12 @@
             <input type="time" id="session-deadline">
             <input type="password" id="new-controller-pass" placeholder="Crie uma senha para o Controller">
             <input type="password" id="new-presenter-pass" placeholder="Crie uma senha para o Presenter">
+            <div class="form-group-options">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="repeat-controller-pass" checked> Usar a mesma senha do Controller
+                </label>
+                <!-- A opção "Sem senha para o Apresentador" foi removida para o MindPool -->
+            </div>
             <label for="session-theme" style="margin-top: 10px; display: block;">Tema da Apresentação:</label>
             <select id="session-theme" name="session-theme">
                 <option value="light" selected>Claro (Light)</option>
@@ -56,6 +62,6 @@
     </div>
 
    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-   <script src="/scripts/admin.js?v=2"></script>
+   <script src="../scripts/admin.js?v=2"></script>
 </body>
 </html>
