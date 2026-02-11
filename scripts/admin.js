@@ -147,12 +147,10 @@ function handlePresenterPassCheckboxes() {
         newPresenterPassInput.disabled = true;
         newPresenterPassInput.required = false;
         newPresenterPassInput.value = ''; // Limpa o valor quando desabilitado
-        // presenterInputGroup.style.display = 'none'; // Não ocultar, apenas desabilitar
         presenterInputGroup.style.display = 'none';
     } else {
         newPresenterPassInput.disabled = false;
         newPresenterPassInput.required = true;
-        // presenterInputGroup.style.display = 'block';
         presenterInputGroup.style.display = 'block';
     }
 }
@@ -231,7 +229,6 @@ createSessionBtn?.addEventListener('click', () => {
         }
     } else {
         presenterPassword = controllerPassword; // Usa a senha do controller se a opção estiver marcada
-        return;
     }
     createSessionBtn.disabled = true;
     createSessionBtn.innerText = 'Criando...';
