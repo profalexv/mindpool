@@ -58,6 +58,7 @@ const ui = {
         presenterPreviewBox: document.getElementById('presenter-preview-box'),
         previewModalOverlay: document.getElementById('preview-modal-overlay'),
         // Inputs do formulário
+        showAllAnswersToggle: document.getElementById('show-all-answers-toggle'),
         questionTextInput: document.getElementById('question-text'),
         imageUrlInput: document.getElementById('question-image'),
         optionsTextInput: document.getElementById('question-options'),
@@ -88,6 +89,10 @@ const ui = {
 
         this.elements.timerEnabledCheckbox?.addEventListener('change', (e) => this.toggleTimerOptions(e.target.checked));
         this.elements.questionTypeSelect?.addEventListener('change', (e) => this.toggleQuestionTypeOptions(e.target.value));
+
+        // Define o tipo de pergunta padrão ao carregar
+        this.elements.questionTypeSelect.value = 'short_text';
+        this.toggleQuestionTypeOptions('short_text');
 
         this.setupPresenterPreview();
 
@@ -164,6 +169,10 @@ const ui = {
 
         this.elements.loadQuestionsInput?.addEventListener('change', (e) => {
             this.loadQuestionsFromFile(e.target.files[0], socketHandler);
+        });
+
+        this.elements.showAllAnswersToggle?.addEventListener('change', (e) => {
+            socketHandler.toggleShowAllTextAnswers(e.target.checked);
         });
 
         // Inicializa o Drag-and-Drop na lista de perguntas
@@ -312,6 +321,10 @@ const ui = {
         this.elements.timerEnabledCheckbox.checked = false;
         this.elements.timerDurationInput.value = '';
         this.elements.timerShowAudienceCheckbox.checked = false;
+        // Reseta para o tipo de pergunta padrão
+        this.elements.questionTypeSelect.value = 'short_text';
+        this.toggleQuestionTypeOptions('short_text');
+
         this.toggleTimerOptions(false);
     },
 
@@ -698,6 +711,9 @@ const ui = {
         } else {
             this.elements.toggleUrlBtn.innerText = 'Exibir Endereço';
         }
+        if (this.elements.showAllAnswersToggle) {
+            this.elements.showAllAnswersToggle.checked = response.showAllTextAnswers || false;
+        }
         if (sessionDeadline) this.showDeadlineWarning();
     },
 
@@ -849,6 +865,10 @@ const socketHandler = {
     toggleAudienceUrl: (visible) => {
         const sessionCode = new URLSearchParams(window.location.search).get('session');
         socket.emit('toggleAudienceUrl', { sessionCode, visible });
+    },
+    toggleShowAllTextAnswers: (showAll) => {
+        const sessionCode = new URLSearchParams(window.location.search).get('session');
+        socket.emit('toggleShowAllTextAnswers', { sessionCode, showAll });
     },
 };
 

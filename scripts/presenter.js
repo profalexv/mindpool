@@ -47,11 +47,19 @@ function getPresenterPassword() {
 const sessionInfoContainer = document.getElementById('session-info-container');
 const questionScreen = document.getElementById('question-screen');
 const resultsContainer = document.getElementById('results-container');
-const wordCloudContainer = document.getElementById('word-cloud-container');
 const presenterTimerEl = document.getElementById('presenter-timer');
 let currentTimer = null;
 let currentQuestion = null; // Armazena a pergunta atual completa
 let sessionDeadline = null;
+let isShowAllMode = false;
+
+// State for dynamic text results
+const MAX_ANSWERS_ON_SCREEN = 40;
+const renderedTextAnswers = new Map();
+
+
+// Adiciona classes ao body para controle de estado e estilo
+document.body.classList.add('presenter-page', 'state-waiting');
 
 // 1. Configuração Inicial
 const sessionCodeForDisplay = new URLSearchParams(window.location.search).get('session');
@@ -105,6 +113,7 @@ function joinPresenterSession() {
         }
 
         applyTheme(response.theme);
+        isShowAllMode = response.showAllTextAnswers || false;
         // Ao entrar, verifica se a URL já deve estar visível
         if (response.isAudienceUrlVisible) {
             const audienceUrlDisplay = document.getElementById('audience-url-display');
@@ -124,17 +133,19 @@ socket.on('newQuestion', (question) => {
         currentTimer.stop();
         currentTimer = null;
     }
+    // Limpa o estado das respostas de texto para a nova pergunta
+    renderedTextAnswers.clear();
+
     if (presenterTimerEl) presenterTimerEl.style.display = 'none';
 
-    if (sessionInfoContainer) sessionInfoContainer.className = 'state-question';
-    if (questionScreen) questionScreen.style.display = 'block';
+    document.body.classList.remove('state-waiting');
+    document.body.classList.add('state-question');
     
     // Limpa os containers de resultado e prepara para a nova pergunta
     if (resultsContainer) {
         resultsContainer.innerHTML = '';
         resultsContainer.className = ''; // Reseta a classe para o padrão
     }
-    if (wordCloudContainer) wordCloudContainer.innerHTML = '';
 
     const questionText = document.getElementById('question-text');
     if (questionText) questionText.innerText = question.text;
@@ -156,7 +167,8 @@ socket.on('newQuestion', (question) => {
 
     // Inicia um novo cronômetro se a pergunta tiver um horário de término
     // e se estiver aceitando respostas (para não reativar em 'showResults')
-    if (question.acceptingAnswers && question.endTime) {
+    // Adicionamos a verificação 'question.timer' para garantir que o cronômetro só seja ativado se a pergunta atual o tiver.
+    if (question.acceptingAnswers && question.timer && question.endTime) {
         if (presenterTimerEl) {
             presenterTimerEl.style.display = 'block';
             currentTimer = new Cronometro(question.endTime, presenterTimerEl, () => {
@@ -176,11 +188,16 @@ socket.on('updateResults', ({ results, questionType }) => {
         case 'yes_no':
             renderYesNoResults(results);
             break;
-        default: // Word cloud
+        default: // Text-based answers
             renderTextResults(results);
             break;
     }
 });
+
+/** Helper para gerar um número inteiro aleatório dentro de um intervalo */
+function getRandomInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
 
 function renderInitialBarResults(options) {
     if (!resultsContainer) return;
@@ -229,36 +246,98 @@ function updateBarResults(results) {
 
 function renderTextResults(results) {
     if (!resultsContainer) return;
-    resultsContainer.className = 'text-results-container';
-    resultsContainer.innerHTML = ''; // Clear previous content
 
-    // Converte o objeto de resultados em um array, ordena por contagem (decrescente)
-    const sortedAnswers = Object.entries(results)
-        .sort(([, countA], [, countB]) => countB - countA);
-
-    const list = document.createElement('ul');
-    list.className = 'text-results-list';
-
-    sortedAnswers.forEach(([answer, count], index) => {
-        const listItem = document.createElement('li');
-        listItem.className = 'text-results-item';
-        listItem.style.animationDelay = `${index * 100}ms`;
+    if (isShowAllMode) {
+        // --- MODO LISTA COM SCROLL ---
+        if (!resultsContainer.classList.contains('show-all-mode')) {
+            resultsContainer.innerHTML = '';
+            renderedTextAnswers.clear(); // Limpa o mapa da nuvem
+            resultsContainer.className = 'text-results-container show-all-mode';
+        }
         
-        const answerText = document.createElement('span');
-        answerText.className = 'text-results-answer';
-        answerText.innerText = answer;
-        listItem.appendChild(answerText);
+        const sortedAnswers = Object.entries(results).sort(([, countA], [, countB]) => countB - countA);
+        
+        // Ineficiente, mas simples e robusto: limpa e re-renderiza a lista ordenada a cada atualização
+        resultsContainer.innerHTML = '';
 
-        if (count > 1) {
+        sortedAnswers.forEach(([answer, count]) => {
+            const item = document.createElement('li');
+            item.className = 'text-results-item style-default'; // Estilo simples de lista
+            
+            const answerText = document.createElement('span');
+            answerText.innerText = answer;
+
             const answerCount = document.createElement('span');
             answerCount.className = 'text-results-count';
             answerCount.innerText = `x${count}`;
-            listItem.appendChild(answerCount);
-        }
-        list.appendChild(listItem);
-    });
+            answerCount.style.display = count > 1 ? 'inline-block' : 'none';
+            
+            item.append(answerText, answerCount);
+            resultsContainer.appendChild(item);
+        });
+        return; // Termina aqui para o modo lista
+    }
 
-    resultsContainer.appendChild(list);
+    // --- MODO NUVEM DE PALAVRAS DINÂMICA ---
+    if (resultsContainer.classList.contains('show-all-mode')) {
+        resultsContainer.innerHTML = '';
+        resultsContainer.className = 'text-results-container';
+    }
+
+    for (const [answer, count] of Object.entries(results)) {
+        if (renderedTextAnswers.has(answer)) {
+            const element = renderedTextAnswers.get(answer);
+            const countEl = element.querySelector('.text-results-count');
+            const currentCount = parseInt(countEl.dataset.count, 10);
+
+            if (count > currentCount) {
+                countEl.innerText = `x${count}`;
+                countEl.dataset.count = count;
+                countEl.style.display = 'inline-block';
+                element.classList.add('updated');
+                setTimeout(() => element.classList.remove('updated'), 500);
+            }
+        } else {
+            if (renderedTextAnswers.size >= MAX_ANSWERS_ON_SCREEN) {
+                const oldestAnswerKey = renderedTextAnswers.keys().next().value;
+                const oldestElement = renderedTextAnswers.get(oldestAnswerKey);
+                if (oldestElement) {
+                    oldestElement.classList.add('fading-out');
+                    setTimeout(() => { oldestElement.remove(); }, 500);
+                }
+                renderedTextAnswers.delete(oldestAnswerKey);
+            }
+
+            const item = document.createElement('li');
+            item.className = 'text-results-item';
+            const styles = ['style-default', 'style-color-1', 'style-color-2', 'style-color-3', 'style-color-4'];
+            const sizes = ['size-small', 'size-medium', 'size-large'];
+            item.classList.add(styles[getRandomInt(0, styles.length - 1)]);
+            item.classList.add(sizes[getRandomInt(0, sizes.length - 1)]);
+            if (Math.random() < 0.15) item.classList.add('style-bubble');
+            else if (Math.random() < 0.10) item.classList.add('style-vertical');
+            const rotation = getRandomInt(-15, 15);
+            item.style.setProperty('--rotation', `${rotation}deg`);
+            const answerText = document.createElement('span');
+            answerText.innerText = answer;
+            const answerCount = document.createElement('span');
+            answerCount.className = 'text-results-count';
+            answerCount.innerText = `x${count}`;
+            answerCount.dataset.count = count;
+            answerCount.style.display = count > 1 ? 'inline-block' : 'none';
+            item.append(answerText, answerCount);
+            resultsContainer.appendChild(item);
+            const itemWidth = item.offsetWidth;
+            const itemHeight = item.offsetHeight;
+            const containerWidth = resultsContainer.offsetWidth;
+            const containerHeight = resultsContainer.offsetHeight;
+            const x = getRandomInt(0, Math.max(0, containerWidth - itemWidth));
+            const y = getRandomInt(0, Math.max(0, containerHeight - itemHeight));
+            item.style.left = `${x}px`;
+            item.style.top = `${y}px`;
+            renderedTextAnswers.set(answer, item);
+        }
+    }
 }
 
 function renderYesNoResults(results) {
@@ -284,9 +363,21 @@ socket.on('audienceUrlVisibilityChanged', ({ visible }) => {
     }
 });
 
+socket.on('showAllTextAnswersToggled', ({ showAll }) => {
+    isShowAllMode = showAll;
+    // Re-renderiza a pergunta atual se for de texto para aplicar o novo modo
+    if (currentQuestion && ['short_text', 'long_text', 'number', 'integer'].includes(currentQuestion.questionType)) {
+        // Limpa o container e re-renderiza do zero
+        resultsContainer.innerHTML = '';
+        renderedTextAnswers.clear();
+        renderTextResults(currentQuestion.results || {});
+    }
+});
+
 socket.on('error', (message) => alert(message));
 socket.on('sessionEnded', (message) => {
     alert(message);
+    document.body.classList.remove('state-question', 'state-waiting');
     window.location.href = '../index.html';
 });
 

@@ -9,7 +9,7 @@
 .session-management { display: flex; gap: 1.5rem; align-items: center; }
 .controls-group { display: flex; gap: 0.75rem; align-items: center; }
 .controller-main-content { display: flex; flex-grow: 1; gap: 1.5rem; padding: 1.5rem; overflow: hidden; }
-.form-column { flex: 1 1 40%; min-width: 400px; }
+.form-column { flex: 1 1 40%; min-width: 400px; overflow-y: auto; padding-right: 0.5rem; }
 .list-column { flex: 1 1 60%; min-width: 450px; display: flex; flex-direction: column; }
 .question-form, .question-list { padding: 1.5rem; border-radius: 8px; background-color: var(--container-bg); border: 1px solid var(--input-border); }
 .question-list { flex-grow: 1; overflow-y: auto; }
